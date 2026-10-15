@@ -2,7 +2,7 @@
 
 [Tài liệu](README.vi.md) · [Kiến trúc](architecture.vi.md) · [English](development.md)
 
-Tài liệu này quy định quy trình đóng góp cho ứng dụng Windows. Đây là phần bổ sung cho đặc tả kiến trúc, không thay thế test của từng subsystem hoặc release gate.
+Tài liệu này quy định quy trình đóng góp cho ứng dụng Windows và Ubuntu. Đây là phần bổ sung cho đặc tả kiến trúc, không thay thế test của từng subsystem hoặc release gate.
 
 ## 1. Môi trường hỗ trợ
 
@@ -10,6 +10,13 @@ Tài liệu này quy định quy trình đóng góp cho ứng dụng Windows. Đ
 - CPython 3.13 x64;
 - PowerShell và Git;
 - môi trường NVIDIA CUDA nếu cần kiểm chứng đường GPU.
+
+Trên Ubuntu cần CPython 3.13, FFmpeg, thư viện Qt runtime và Secret Service. Có thể tạo môi trường và chạy ứng dụng bằng:
+
+```bash
+./scripts/install-ubuntu.sh
+./scripts/run-desktop.sh
+```
 
 Không cài dependency production tùy ý vào Python toàn cục. Repository dùng bộ dependency Windows khóa hash và kiểm tra environment thực tế.
 

@@ -1,7 +1,7 @@
 <div align="center">
   <img src="src/haizflow/desktop/assets/branding/haizflow-mark.png" width="96" alt="HaizFlow logo">
   <h1>HaizFlow</h1>
-  <p><strong>A free Windows app for downloading, translating, subtitling and dubbing videos.</strong></p>
+  <p><strong>A free Windows and Ubuntu app for downloading, translating, subtitling and dubbing videos.</strong></p>
   <p><a href="https://github.com/MachHongHai/HaizFlow/releases/download/v1.0.0/HaizFlow-1.0.0-Setup.exe">Installation</a> · <a href="docs/user-guide.md">User guide</a> · <a href="docs/support.md">Help</a> · <a href="README.vi.md">Tiếng Việt</a></p>
 </div>
 
@@ -89,6 +89,18 @@ Gemini, Zernio and other external services have their own terms, limits and char
 4. Select language, models and voice if needed. Process, review and **Export** the video.
 
 Supported systems are Windows 10 version 1809 or later and Windows 11 x64, with at least 16 GB system RAM. Installer users do not need Python. Resource packs, projects and exports need additional storage; Setup and the Resource packs page show their corresponding requirements.
+
+### Run from source on Ubuntu
+
+Ubuntu currently runs from source; there is no `.deb` or AppImage package yet. Install Python 3.13, FFmpeg, and the Qt/Secret Service system libraries, then run:
+
+```bash
+sudo apt install ffmpeg libegl1 libgl1 libxkbcommon-x11-0 libxcb-cursor0 libsecret-1-0 libsecret-tools
+./scripts/install-ubuntu.sh
+./scripts/run-desktop.sh
+```
+
+API keys are stored in the desktop Secret Service (GNOME Keyring or KWallet), so an active desktop keyring is required. The prebuilt engines offered by the Resource packs page remain Windows artifacts; on Ubuntu, install AI dependencies in the source Python environment.
 
 GPU mode supports compatible NVIDIA 4 GB-class cards (at least 3.5 GiB dedicated VRAM reported by CUDA). On 4 GB, use Whisper Small GPU, HY-MT2 CPU Q4 or Gemini, and OmniVoice GPU; these heavy stages run sequentially, with one voice sentence at a time. Whisper Turbo and full HY-MT2 GPU need more VRAM. Available VRAM and system memory still matter at runtime. Windows Smart App Control or an Application Control policy may block this unsigned build; see the [installation guide](docs/install.md).
 

@@ -1,7 +1,7 @@
 <div align="center">
   <img src="src/haizflow/desktop/assets/branding/haizflow-mark.png" width="96" alt="Logo HaizFlow">
   <h1>HaizFlow</h1>
-  <p><strong>Ứng dụng miễn phí để tải, dịch, tạo phụ đề và lồng tiếng video trên Windows.</strong></p>
+  <p><strong>Ứng dụng miễn phí để tải, dịch, tạo phụ đề và lồng tiếng video trên Windows và Ubuntu.</strong></p>
   <p><a href="https://github.com/MachHongHai/HaizFlow/releases/download/v1.0.0/HaizFlow-1.0.0-Setup.exe">Cài đặt</a> · <a href="docs/user-guide.vi.md">Hướng dẫn sử dụng</a> · <a href="docs/support.vi.md">Trợ giúp</a> · <a href="README.md">English</a></p>
 </div>
 
@@ -89,6 +89,18 @@ Gemini, Zernio và các dịch vụ bên ngoài có điều khoản, hạn mức
 4. Chọn ngôn ngữ, model và giọng đọc nếu cần. Chạy xử lý, kiểm tra kết quả rồi **Xuất** video.
 
 Ứng dụng hỗ trợ Windows 10 phiên bản 1809 trở lên và Windows 11 x64, RAM hệ thống từ 16 GB. Không cần cài Python khi dùng bộ cài. Cần thêm dung lượng cho gói tài nguyên, video và tệp xuất; bộ cài và trang Gói tài nguyên hiển thị yêu cầu tương ứng.
+
+### Chạy từ mã nguồn trên Ubuntu
+
+Ubuntu hiện chạy trực tiếp từ mã nguồn; chưa có gói `.deb` hoặc AppImage. Cài Python 3.13, FFmpeg và thư viện hệ thống Qt/Secret Service, sau đó chạy:
+
+```bash
+sudo apt install ffmpeg libegl1 libgl1 libxkbcommon-x11-0 libxcb-cursor0 libsecret-1-0 libsecret-tools
+./scripts/install-ubuntu.sh
+./scripts/run-desktop.sh
+```
+
+API key được lưu bằng Secret Service của desktop (GNOME Keyring hoặc KWallet). Phiên desktop phải có keyring đang hoạt động. Các gói engine dựng sẵn trong trang **Gói tài nguyên** vẫn là artifact Windows; trên Ubuntu, dependency AI được cài trong môi trường Python nguồn.
 
 Chế độ GPU hỗ trợ card NVIDIA loại 4 GB (CUDA báo ít nhất 3,5 GiB VRAM riêng). Với card 4 GB, chọn Whisper Small GPU, HY-MT2 CPU Q4 hoặc Gemini và OmniVoice GPU; các bước nặng chạy lần lượt, giọng đọc tạo từng câu. Whisper Turbo và HY-MT2 GPU đầy đủ cần nhiều VRAM hơn. VRAM trống và RAM hệ thống tại lúc chạy vẫn phải đủ. Bản chưa ký số có thể bị Windows Smart App Control hoặc chính sách Application Control chặn; xem [hướng dẫn cài đặt](docs/install.vi.md).
 

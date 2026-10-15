@@ -42,21 +42,23 @@ class BrowserProfile:
 
     @property
     def transport_mode(self) -> str:
-        # Explicit, tested Chrome-family mapping for the shipped Chromium 157.
-        # curl_cffi 0.16.3's newest TLS/H2 template is Chrome 150. Keep the
-        # actual browser UA/cookies/fingerprint unchanged; do not rotate UAs
-        # or silently select arbitrary profiles for unknown browser versions.
-        if self.major == 157:
-            return "chrome150"
-        return f"chrome{self.major}"
+        # curl_cffi only ships TLS/H2 templates for selected Chrome releases.
+        # Use the closest template while retaining the browser's real UA and
+        # JavaScript fingerprint. Ubuntu's Chrome 149, for example, uses 150.
+        supported = (99, 100, 101, 104, 107, 110, 116, 119, 120, 123, 124,
+                     131, 136, 142, 145, 146, 150)
+        closest = min(supported, key=lambda version: abs(version - self.major))
+        return f"chrome{closest}"
 
     @classmethod
     def from_browser(cls, values: dict) -> BrowserProfile:
         ua = str(values.get("userAgent") or "")
         match = re.search(r"(?:Headless)?Chrome/(\d+\.\d+\.\d+\.\d+)", ua)
-        if not match or values.get("platform") != "Win32":
+        platform = str(values.get("platform") or "")
+        if not match or platform not in {"Win32", "Linux x86_64"}:
             raise ValueError("The Douyin browser profile is not supported by the native transport.")
-        return cls(major=int(match[1].split(".")[0]), version=match[1], user_agent=ua,
+        return cls(major=int(match[1].split(".")[0]), version=match[1], platform=platform,
+                   user_agent=ua,
                    width=int(values["width"]), height=int(values["height"]),
                    language=str(values["language"]), cores=int(values.get("cores") or 8),
                    memory=int(values.get("memory") or 8))
@@ -124,7 +126,8 @@ class DouyinTransport:
         request_headers = {
             "User-Agent": self.profile.ua, "Accept-Language": self.profile.language + ",zh;q=0.9",
             "Accept": "application/json,text/html;q=0.9,*/*;q=0.8",
-            "Referer": "https://www.douyin.com/", "sec-ch-ua-platform": '"Windows"',
+            "Referer": "https://www.douyin.com/",
+            "sec-ch-ua-platform": '"Linux"' if self.profile.platform.startswith("Linux") else '"Windows"',
             "sec-ch-ua-mobile": "?0",
             "sec-ch-ua": f'"Chromium";v="{self.profile.major}", "Google Chrome";v="{self.profile.major}"',
         }

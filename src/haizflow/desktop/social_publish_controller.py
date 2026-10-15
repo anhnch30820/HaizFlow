@@ -34,7 +34,7 @@ TIKTOK_MAX_VIDEO_BYTES = 4_000_000_000
 SUPPORTED_PLATFORMS = ("tiktok", "youtube", "facebook", "instagram")
 PLATFORM_LABELS = {
     "tiktok": "TikTok",
-    "youtube": "YouTube Shorts",
+    "youtube": "YouTube",
     "facebook": "Facebook Reels",
     "instagram": "Instagram Reels",
 }
@@ -301,6 +301,11 @@ class SocialPublishController:
     @property
     def selected_platform_label(self) -> str:
         return PLATFORM_LABELS.get(self.selected_platform, self.selected_platform.title())
+
+    @property
+    def youtube_content_type(self) -> str:
+        value = str(self._state.get("youtube_content_type") or "video").casefold()
+        return value if value in {"video", "shorts"} else "video"
 
     @property
     def selected_account_name(self) -> str:
@@ -1195,6 +1200,7 @@ class SocialPublishController:
         share_to_feed: bool = True,
         ai_generated: bool = False,
         first_comment: str = "",
+        youtube_content_type: str = "video",
     ) -> bool:
         if not self._ensure_publish_project():
             return False
@@ -1211,6 +1217,9 @@ class SocialPublishController:
             "share_to_feed": bool(share_to_feed),
             "ai_generated": bool(ai_generated),
             "first_comment": first_comment,
+            "youtube_content_type": (
+                youtube_content_type if youtube_content_type in {"video", "shorts"} else "video"
+            ),
         }
         self._state = tiktok_publish.update_publish_settings(self._project_root, **values)
         after = self._publish_settings_snapshot()
@@ -1237,6 +1246,7 @@ class SocialPublishController:
             "share_to_feed",
             "ai_generated",
             "first_comment",
+            "youtube_content_type",
         )
         return {key: self._state.get(key) for key in keys}
 
@@ -1392,6 +1402,10 @@ class SocialPublishController:
             os.path.normcase(os.path.abspath(str(item.get("source_path") or "")))
             for item in self._state.get("items") or []
             if item.get("source_path")
+            and not (
+                item.get("status") in {"published", "posted", "scheduled"}
+                and item.get("target_platform") != self.selected_platform
+            )
         }
         for value in paths:
             path = normalize_video_path(value)
@@ -2585,7 +2599,7 @@ class SocialPublishController:
         height = int(item.get("video_height") or 0)
         if platform in {"facebook", "instagram"} and suffix not in {".mp4", ".mov"}:
             return f"{PLATFORM_LABELS[platform]} requires an MP4 or MOV video."
-        if platform == "youtube":
+        if platform == "youtube" and self.youtube_content_type == "shorts":
             if duration > 180.0:
                 return "YouTube Shorts must be 3 minutes or shorter."
             if width > 0 and height > 0 and width >= height:

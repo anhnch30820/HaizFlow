@@ -1115,6 +1115,10 @@ class HaizFlowController(QObject):
     def zernioSelectedPlatformLabel(self):
         return self._tiktok_publisher.selected_platform_label
 
+    @Property(str, notify=zernioPostOptionsChanged)
+    def zernioYoutubeContentType(self):
+        return self._tiktok_publisher.youtube_content_type
+
     @Property(int, notify=zernioAccountsChanged)
     def zernioSelectedAccountIndex(self):
         return self._tiktok_publisher.selected_account_index
@@ -6762,7 +6766,7 @@ class HaizFlowController(QObject):
     def disconnectZernioConnection(self, index: int):
         return self._tiktok_publisher.disconnect_account(index)
 
-    @Slot(str, bool, bool, bool, bool, bool, bool, str, result=bool)
+    @Slot(str, bool, bool, bool, bool, bool, bool, str, str, result=bool)
     def saveZernioPublishSettings(
         self,
         privacy_level: str,
@@ -6773,6 +6777,7 @@ class HaizFlowController(QObject):
         share_to_feed: bool,
         ai_generated: bool,
         first_comment: str,
+        youtube_content_type: str,
     ):
         return self._tiktok_publisher.set_publish_settings(
             privacy_level,
@@ -6783,6 +6788,7 @@ class HaizFlowController(QObject):
             share_to_feed,
             ai_generated,
             first_comment,
+            youtube_content_type,
         )
 
     @Slot(bool)

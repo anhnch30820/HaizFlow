@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
+import sys
 import tempfile
 from pathlib import Path
 
@@ -15,6 +17,17 @@ ARCHIVE_BYTES = 361641954
 INSTALLED_BYTES = 484202247
 MISSING_MESSAGE = "Install the Douyin browser in Resource Packs before creating a session."
 EXCLUDED = {"interactive_ui_tests.exe", "setup.exe", "First Run"}
+
+
+def executable_path() -> Path:
+    """Return a platform-compatible browser without reusing its user profile."""
+    if sys.platform != "win32":
+        executable = shutil.which("google-chrome") or shutil.which("google-chrome-stable") \
+            or shutil.which("chromium") or shutil.which("chromium-browser")
+        if executable:
+            return Path(executable)
+        raise FileNotFoundError("Ubuntu cần Google Chrome hoặc Chromium để tạo phiên Douyin riêng.")
+    return component_root() / "chrome-win/chrome.exe"
 
 
 def component_root():
@@ -68,6 +81,11 @@ def verify_files(root: Path, *, full=False, cancel_event=None):
 
 
 def installed(root: Path | None = None):
+    if sys.platform != "win32":
+        try:
+            return executable_path().is_file()
+        except OSError:
+            return False
     root = root or component_root()
     try:
         marker = json.loads((root / "complete.json").read_text("utf-8"))
@@ -84,11 +102,12 @@ def installed(root: Path | None = None):
 def smoke(root: Path, cancel_event=None):
     """Test an owned headless blank window; never open Douyin during install."""
     from playwright.sync_api import sync_playwright
-    verify_files(root, full=True, cancel_event=cancel_event)
+    if sys.platform == "win32":
+        verify_files(root, full=True, cancel_event=cancel_event)
     with tempfile.TemporaryDirectory(prefix="browser-smoke-", dir=root.parent) as profile:
         with sync_playwright() as driver:
             context = driver.chromium.launch_persistent_context(
-                profile, executable_path=str(root / "chrome-win/chrome.exe"), headless=True,
+                profile, executable_path=str(executable_path()), headless=True,
                 chromium_sandbox=True, timeout=15000,
                 args=["--no-first-run", "--no-default-browser-check", "--disable-background-networking"])
             try:

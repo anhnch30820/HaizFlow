@@ -349,7 +349,8 @@ def _approved_download_url(url: str) -> bool:
         or host == "objects.githubusercontent.com"
         or host.endswith(".githubusercontent.com")
         or (host == "storage.googleapis.com"
-            and parsed.path.startswith("/chromium-browser-snapshots/Win_x64/"))
+            and parsed.path.startswith(("/chromium-browser-snapshots/Win_x64/",
+                                        "/chromium-browser-snapshots/Linux_x64/")))
     )
 
 

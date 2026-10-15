@@ -1,4 +1,4 @@
-"""Explicit owned Douyin guest browser. No personal profile or CAPTCHA solving.
+"""Explicit owned Douyin browser. No personal Chrome profile or CAPTCHA solving.
 
 The browser SDK signs requests locally; native curl transport sends them.
 The unmodified Chromium component is isolated from users' installed browsers.
@@ -10,7 +10,6 @@ import concurrent.futures
 import logging
 import re
 import sys
-import tempfile
 import threading
 import time
 from contextlib import suppress
@@ -24,10 +23,9 @@ from haizflow.vendor.douyin_browser_sdk import CAPTURE_INIT_SCRIPT, FINGERPRINT_
 
 CHROMIUM_REVISION = "1714059"
 PLAYWRIGHT_VERSION = "1.63.0"
-IDLE_SECONDS = 90
+IDLE_SECONDS = 300
 HUMAN_WAIT_SECONDS = 300
 SDK_WAIT_SECONDS = 25
-AUTH_COOKIES = {"sessionid", "sessionid_ss", "sid_guard", "sid_tt"}
 logger = logging.getLogger(__name__)
 OPTIONAL_LOGIN_TITLE = "登录后免费畅享高清视频"
 OPTIONAL_LOGIN_CLOSE = 'div:has(> svg[viewBox="0 0 37 36"] > path[d^="M12.7929 22.2426"])'
@@ -41,9 +39,10 @@ def component_directory():
 
 
 def browser_executable() -> Path:
-    # Use only the owned component. No discovery of Chrome/Edge or personal profiles.
-    from haizflow.services.douyin_component import component_root
-    return component_root() / "chrome-win/chrome.exe"
+    # Linux may reuse an installed browser binary, but every session still uses
+    # HaizFlow's isolated temporary profile rather than the personal profile.
+    from haizflow.services.douyin_component import executable_path
+    return executable_path()
 
 
 class _ChromiumDriver:
@@ -161,13 +160,12 @@ class DouyinBrowserSession:
             self._idle = None
         context, self._context, self._page = self._context, None, None
         if context:
-            # Preserve late guest-cookie rotations before idle disposal, too.
+            # Preserve late cookie rotations before idle disposal, too.
             if self._state:
                 with suppress(Exception):
                     async with asyncio.timeout(1):
                         cookies = await context.cookies(["https://www.douyin.com/"])
-                        if not any(c["name"] in AUTH_COOKIES for c in cookies):
-                            self._state = {**self._state, "cookies": cookies}
+                        self._state = {**self._state, "cookies": cookies}
             with suppress(Exception):
                 async with asyncio.timeout(5):
                     await context.close()
@@ -190,10 +188,11 @@ class DouyinBrowserSession:
         if self._profile_dir is None:
             directory = component_directory() / "profiles"
             directory.mkdir(parents=True, exist_ok=True)
-            self._profile_dir = tempfile.TemporaryDirectory(prefix="guest-", dir=directory)
+            self._profile_dir = directory / "douyin-user"
+            self._profile_dir.mkdir(parents=True, exist_ok=True)
         self._driver_instance = await asyncio.to_thread(_driver, cancel_event, self._status_callback)
         self._context = await self._driver_instance.launch_persistent_context_async(
-            executable_path=str(browser_executable()), user_data_dir=self._profile_dir.name,
+            executable_path=str(browser_executable()), user_data_dir=str(self._profile_dir),
             headless=False, timeout=15000, locale="zh-CN", timezone_id="Asia/Shanghai",
             chromium_sandbox=True, no_viewport=True,
             args=["--no-first-run", "--no-default-browser-check", "--disable-background-networking"])
@@ -260,8 +259,6 @@ class DouyinBrowserSession:
 
     async def _snapshot(self):
         cookies = await self._context.cookies(["https://www.douyin.com/"])
-        if any(cookie["name"] in AUTH_COOKIES for cookie in cookies):
-            raise RuntimeError("The Douyin browser session must remain anonymous.")
         fingerprint = await self._page.evaluate(FINGERPRINT_READ)
         BrowserProfile.from_browser(fingerprint)
         return {"cookies": cookies, "fingerprint": fingerprint}
@@ -295,7 +292,7 @@ class DouyinBrowserSession:
         from haizflow.services.douyin_adapter import _check_cancel
         deadline = time.monotonic() + SDK_WAIT_SECONDS
         human_deadline = time.monotonic() + HUMAN_WAIT_SECONDS
-        delay, waiting, errors, prompt_attempts = 0.25, False, 0, 0
+        delay, waiting, errors = 0.25, False, 0
         while True:
             _check_cancel(cancel_event)
             challenge = await self._challenge()
@@ -325,11 +322,8 @@ class DouyinBrowserSession:
                 deadline = time.monotonic() + SDK_WAIT_SECONDS
                 if status_callback:
                     status_callback("Checking the Douyin session")
-            if prompt_attempts < 2:
-                prompt_result = await self._dismiss_optional_login()
-                if prompt_result is not None:
-                    prompt_attempts += 1
-                _check_cancel(cancel_event)
+            # Keep the login panel available.  Douyin increasingly requires a
+            # trusted signed-in profile before exposing video metadata.
             try:
                 return await self._capture(path, params)
             except DouyinError as exc:
@@ -341,7 +335,8 @@ class DouyinBrowserSession:
                     raise
                 errors += 1
                 if errors >= 3:
-                    logger.info("douyin browser sdk_error=%s classification=network_transient", type(exc).__name__)
+                    logger.info("douyin browser sdk_error=%s detail=%s classification=network_transient",
+                                type(exc).__name__, str(exc)[:500])
                     raise DouyinError(Outcome.NETWORK) from None
             if time.monotonic() >= deadline:
                 raise DouyinError(Outcome.SIGNATURE)
@@ -419,8 +414,7 @@ class DouyinBrowserSession:
 
         baseline = {key(c): c["value"] for c in (self._state or {}).get("cookies", [])}
         current = {key(c): c["value"] for c in await self._context.cookies(["https://www.douyin.com/"])}
-        changed = [c for c in cookies if c["name"] not in AUTH_COOKIES
-                   and c["value"] != baseline.get(key(c))
+        changed = [c for c in cookies if c["value"] != baseline.get(key(c))
                    and current.get(key(c)) == baseline.get(key(c))]
         if changed:
             await self._context.add_cookies(changed)
@@ -445,11 +439,6 @@ class DouyinBrowserSession:
             asyncio.run_coroutine_threadsafe(self._close_context(), self._loop).result(timeout=7)
         self._loop.call_soon_threadsafe(self._loop.stop)
         self._thread.join(timeout=2)
-        if self._profile_dir and not self._thread.is_alive():
-            with suppress(OSError):
-                self._profile_dir.cleanup()
-
-
 def create_anonymous_state(cancel_event=None, status_callback=None):
     backend = DouyinBrowserSession()
     try:

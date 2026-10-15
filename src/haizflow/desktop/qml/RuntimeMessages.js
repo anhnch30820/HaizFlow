@@ -57,7 +57,7 @@ var vietnamese = {
         "Douyin refresh failed; previous session retained": "Chưa làm mới được phiên. Phiên trước vẫn được giữ.",
         "Douyin refresh cancelled; previous session retained": "Đã hủy làm mới. Phiên trước vẫn được giữ.",
         "Douyin session cancelled": "Đã hủy tạo phiên Douyin.",
-        "The Douyin browser session must remain anonymous.": "Phiên Douyin chỉ dùng ở chế độ khách, không đăng nhập tài khoản.",
+        "The Douyin browser session must remain anonymous.": "Hãy dùng profile Douyin riêng của HaizFlow.",
         "The optional Douyin browser component is not installed.": "Chưa cài thành phần trình duyệt riêng cho Douyin.",
         "Could not start the optional Douyin browser. Check that its Chromium component is installed.": "Không mở được trình duyệt riêng của Douyin. Kiểm tra thành phần Chromium đã được cài.",
         "The Douyin browser version needs a matching curl_cffi transport profile.": "Phiên bản trình duyệt Douyin chưa tương thích với bộ tải hiện tại.",

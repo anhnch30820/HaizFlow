@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import subprocess
 from functools import lru_cache
@@ -11,7 +12,8 @@ def _binary(name: str) -> str:
     resolved = shutil.which(name)
     if resolved:
         return resolved
-    return str(Path(BIN_DIR) / f"{name}.exe")
+    executable = f"{name}.exe" if os.name == "nt" else name
+    return str(Path(BIN_DIR) / executable)
 
 
 @lru_cache(maxsize=1)

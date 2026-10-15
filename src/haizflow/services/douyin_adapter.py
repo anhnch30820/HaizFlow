@@ -444,8 +444,8 @@ class DouyinAdapter:
                 candidate = DouyinSession(self.session.transport_factory, browser_state=state)
                 candidate.browser = browser or state.get("backend")
                 candidate.ready = True
-                # A created guest jar must work with native signing before we
-                # close the visible browser. Normal requests never reopen it.
+                # A created guest jar must work with native signing before it
+                # is accepted for normal requests.
                 candidate.native_verified = True
                 candidate.generation = self.session.generation + 1
                 try:
@@ -453,8 +453,11 @@ class DouyinAdapter:
                         status_callback("Checking the Douyin session")
                     DouyinAdapter(candidate)._api(DETAIL_PATH, {"aweme_id": "0"}, cancel_event, session_probe=True)
                     _check_cancel(cancel_event)
-                    if candidate.browser:
-                        candidate.browser.park()
+                    # Keep the verified owned window alive for the following
+                    # link inspection.  Parking it here forces Linux Chrome to
+                    # recreate its document and Douyin immediately challenges
+                    # the otherwise valid fresh profile.  The browser session
+                    # already has an idle timer and closes itself when unused.
                     _check_cancel(cancel_event)
                 except BaseException:
                     candidate.transport.close()

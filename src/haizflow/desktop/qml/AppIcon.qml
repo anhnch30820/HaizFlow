@@ -7,10 +7,11 @@ Text {
     property string glyph: ""
     property color iconColor: Theme.textMuted
     property int iconSize: Theme.icon
+    readonly property bool useFluentFont: Qt.platform.os === "windows"
 
-    text: glyph
+    text: useFluentFont ? glyph : IconCatalog.portableGlyph(glyph)
     color: iconColor
-    font.family: Theme.iconFont
+    font.family: useFluentFont ? Theme.iconFont : "Noto Sans Symbols 2"
     font.pixelSize: iconSize
     horizontalAlignment: Text.AlignHCenter
     verticalAlignment: Text.AlignVCenter

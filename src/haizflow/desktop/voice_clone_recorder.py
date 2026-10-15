@@ -59,7 +59,7 @@ class VoiceCloneRecorder:
                 self.error = "Microphone đã chọn không còn kết nối. Hãy chọn thiết bị khác."
                 return False
         if device.isNull():
-            self.error = "Không tìm thấy microphone. Hãy kiểm tra thiết bị ghi âm trong Windows."
+            self.error = "Không tìm thấy microphone. Hãy kiểm tra thiết bị ghi âm của hệ điều hành."
             return False
 
         try:
@@ -92,7 +92,7 @@ class VoiceCloneRecorder:
             if opened is None:
                 raise RuntimeError(
                     "Không thể mở microphone "
-                    f"({last_error}). Hãy kiểm tra thiết bị và quyền microphone trong Windows."
+                    f"({last_error}). Hãy kiểm tra thiết bị và quyền microphone của hệ điều hành."
                 )
             self._source, self._stream, self._capture_format = opened
             self._wave = wave.open(path, "wb")

@@ -689,6 +689,7 @@ class SocialPublishControllerTests(unittest.TestCase):
 
     def test_youtube_short_rejects_horizontal_or_long_video(self):
         self.controller._state["selected_platform"] = "youtube"
+        self.controller._state["youtube_content_type"] = "shorts"
         self.assertIn(
             "3 minutes",
             self.controller._platform_video_error(
@@ -710,6 +711,20 @@ class SocialPublishControllerTests(unittest.TestCase):
                     "video_height": 1080,
                 }
             ),
+        )
+
+    def test_youtube_video_allows_long_horizontal_video(self):
+        self.controller._state.update(selected_platform="youtube", youtube_content_type="video")
+        self.assertEqual(
+            self.controller._platform_video_error(
+                {
+                    "file_path": "clip.mp4",
+                    "duration_seconds": 281.773,
+                    "video_width": 1920,
+                    "video_height": 1080,
+                }
+            ),
+            "",
         )
 
     def test_meta_reels_reject_webm_and_platform_duration_limits(self):

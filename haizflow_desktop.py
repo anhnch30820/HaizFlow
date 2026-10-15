@@ -6,7 +6,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 SRC = ROOT / "src"
 VENV_DIR = ROOT / ".venv"
-VENV_PYTHON = ROOT / ".venv" / "Scripts" / "python.exe"
+
+
+def _venv_python() -> Path:
+    """Return the virtual-environment interpreter for the host platform."""
+    if os.name == "nt":
+        return VENV_DIR / "Scripts" / "python.exe"
+    return VENV_DIR / "bin" / "python"
+
+
+VENV_PYTHON = _venv_python()
 
 
 def _restore_internal_standard_streams() -> None:

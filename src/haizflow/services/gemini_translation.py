@@ -107,7 +107,7 @@ def select_key(key_id: str) -> None:
         if key_id not in known and key_id != "legacy":
             raise ValueError("Không tìm thấy API key đã chọn.")
         if not secure_credentials.read_secret(_credential_target(key_id)).strip():
-            raise ValueError("API key này không còn trong Windows Credential Manager.")
+            raise ValueError("API key này không còn trong kho thông tin đăng nhập của hệ điều hành.")
         index["active"] = key_id
         _save_key_index(index)
 

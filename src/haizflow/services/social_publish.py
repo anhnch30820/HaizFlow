@@ -17,7 +17,7 @@ from haizflow.services import zernio
 
 STATE_FILE_NAME = ".haizflow-social-publish.json"
 LEGACY_STATE_FILE_NAME = ".haizflow-tiktok-publish.json"
-STATE_SCHEMA_VERSION = 5
+STATE_SCHEMA_VERSION = 6
 MAX_POST_TEXT_UTF16 = 2200
 _STATE_LOCK = threading.RLock()
 _HASHTAG_SEPARATOR = re.compile(r"[\s,;]+", re.UNICODE)
@@ -36,6 +36,7 @@ def _empty_state() -> dict[str, Any]:
         "default_hashtags": "",
         "selected_account_id": "",
         "selected_platform": "tiktok",
+        "youtube_content_type": "video",
         "privacy_level": "",
         "allow_comment": True,
         "allow_duet": True,
@@ -144,7 +145,7 @@ def _read_payload(path: str) -> dict[str, Any] | None:
             payload = json.load(handle)
     except (FileNotFoundError, OSError, json.JSONDecodeError, TypeError, ValueError):
         return None
-    if not isinstance(payload, dict) or payload.get("schema_version") not in {1, 2, 3, 4, STATE_SCHEMA_VERSION}:
+    if not isinstance(payload, dict) or payload.get("schema_version") not in {1, 2, 3, 4, 5, STATE_SCHEMA_VERSION}:
         return None
     return payload
 
@@ -224,6 +225,11 @@ def load_state(project_root: str) -> dict[str, Any]:
         "default_hashtags": normalize_hashtags(str(payload.get("default_hashtags") or "")),
         "selected_account_id": str(payload.get("selected_account_id") or ""),
         "selected_platform": str(payload.get("selected_platform") or "tiktok").casefold(),
+        "youtube_content_type": (
+            str(payload.get("youtube_content_type") or "video").casefold()
+            if str(payload.get("youtube_content_type") or "video").casefold() in {"video", "shorts"}
+            else "video"
+        ),
         "privacy_level": str(payload.get("privacy_level") or ""),
         "allow_comment": bool(payload.get("allow_comment", True)),
         "allow_duet": bool(payload.get("allow_duet", True)),
@@ -245,6 +251,7 @@ def save_state(project_root: str, state: dict[str, Any]) -> None:
         "default_hashtags": normalize_hashtags(str(state.get("default_hashtags") or "")),
         "selected_account_id": str(state.get("selected_account_id") or ""),
         "selected_platform": str(state.get("selected_platform") or "tiktok").casefold(),
+        "youtube_content_type": str(state.get("youtube_content_type") or "video").casefold(),
         "privacy_level": str(state.get("privacy_level") or ""),
         "allow_comment": bool(state.get("allow_comment", True)),
         "allow_duet": bool(state.get("allow_duet", True)),
@@ -368,6 +375,7 @@ def update_publish_settings(project_root: str, **changes: Any) -> dict[str, Any]
     allowed = {
         "selected_account_id",
         "selected_platform",
+        "youtube_content_type",
         "privacy_level",
         "allow_comment",
         "allow_duet",

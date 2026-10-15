@@ -15,6 +15,7 @@ import threading
 import time
 import traceback
 import zipfile
+import platform
 from pathlib import Path
 
 from haizflow.core.vieneu_assets import CACHE_VERSION, MANIFEST
@@ -49,16 +50,29 @@ def prepare_runtime(root: Path) -> Path:
     destination = root / "sdk" / ("runtime-" + MANIFEST["sdk_version"])
     with _PREPARE_LOCK:
         marker = destination / ".ready"
+        windows = sys.platform == "win32"
+        native_wheels = list(wheels)
+        if not windows:
+            machine = platform.machine().lower()
+            if machine not in {"x86_64", "amd64"}:
+                raise RuntimeError(f"VieNeu chưa hỗ trợ kiến trúc Linux {machine}.")
+            linux_wheels = sorted((root / "sdk").glob("*manylinux*x86_64.whl"))
+            if len(linux_wheels) < 2:
+                raise RuntimeError("Gói VieNeu cho Ubuntu chưa đầy đủ; cần cài lại tài nguyên VieNeu Linux.")
+            native_wheels = ["sdk/vieneu-3.8.3-py3-none-any.whl",
+                             *(str(path.relative_to(root)) for path in linux_wheels)]
+        native_suffix = ".pyd" if windows else ".so"
         required = ("vieneu/__init__.py", "vieneu/v3turbo.py", "vieneu/assets/voices_v3_turbo.json",
-                    "sea_g2p/__init__.py", "sea_g2p/sea_g2p_rs.pyd", "kaldi_native_fbank/__init__.py",
-                    "_kaldi_native_fbank.cp313-win_amd64.pyd", "kaldi-native-fbank-core.dll")
+                    "sea_g2p/__init__.py", "kaldi_native_fbank/__init__.py")
         if (marker.is_file() and marker.read_text(encoding="ascii") == CACHE_VERSION
-                and all((destination / name).is_file() for name in required)):
+                and all((destination / name).is_file() for name in required)
+                and any((destination / "sea_g2p").glob(f"sea_g2p_rs*{native_suffix}"))
+                and any(destination.glob(f"_kaldi_native_fbank*{native_suffix}"))):
             return destination
         with tempfile.TemporaryDirectory(prefix="vieneu-sdk-", dir=root / "sdk") as work:
             staging = Path(work) / "site-packages"
             staging.mkdir()
-            for filename in wheels:
+            for filename in native_wheels:
                 with zipfile.ZipFile(root / filename) as archive:
                     for member in archive.infolist():
                         relative = Path(member.filename)

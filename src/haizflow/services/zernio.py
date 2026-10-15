@@ -223,7 +223,11 @@ class ZernioClient:
         ai_generated: bool = False,
         first_comment: str = "",
     ) -> Any:
-        """Create one short-form video post for a supported Zernio connection."""
+        """Create one video post for a supported Zernio connection.
+
+        YouTube itself classifies vertical videos up to three minutes as
+        Shorts; longer or horizontal uploads become regular videos.
+        """
         platform_name = normalize_platform(platform)
         if platform_name == "tiktok":
             return self.create_tiktok_post(

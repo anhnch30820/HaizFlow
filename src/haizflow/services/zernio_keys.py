@@ -69,7 +69,7 @@ def key_value(key_id):
             raise ValueError("Không tìm thấy API key đã chọn.")
         value = secure_credentials.read_secret(_target(key_id)).strip()
         if not value:
-            raise ValueError("API key này không còn trong Windows Credential Manager.")
+            raise ValueError("API key này không còn trong kho thông tin đăng nhập của hệ điều hành.")
         return value
 
 

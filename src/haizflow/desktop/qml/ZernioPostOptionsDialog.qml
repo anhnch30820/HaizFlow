@@ -13,7 +13,8 @@ AppDialog {
     title: qsTr("Tùy chọn bài đăng")
     subtitle: AppController.zernioSelectedPlatformLabel
     preferredWidth: 540
-    preferredHeight: platform === "facebook" || platform === "instagram" ? 440 : 370
+    preferredHeight: platform === "facebook" || platform === "instagram" ? 440
+        : platform === "youtube" ? 420 : 370
     maximumWidth: 580
     maximumHeight: 600
 
@@ -43,8 +44,34 @@ AppDialog {
             stitchCheck.checked,
             shareToFeedCheck.checked,
             aiGeneratedCheck.checked,
-            firstCommentInput.text
+            firstCommentInput.text,
+            root.platform === "youtube" && youtubeTypeCombo.currentIndex >= 0
+                ? String(youtubeTypeCombo.model[youtubeTypeCombo.currentIndex].value)
+                : AppController.zernioYoutubeContentType
         )
+    }
+
+    RowLayout {
+        Layout.fillWidth: true
+        visible: root.platform === "youtube"
+        spacing: Theme.space8
+
+        SettingLabel {
+            Layout.preferredWidth: 150
+            text: qsTr("Loại video")
+        }
+
+        StudioComboBox {
+            id: youtubeTypeCombo
+            Layout.fillWidth: true
+            textRole: "label"
+            model: [
+                {"value": "video", "label": qsTr("YouTube Video")},
+                {"value": "shorts", "label": qsTr("YouTube Shorts")}
+            ]
+            onActivated: root.savePublishSettings()
+            Component.onCompleted: currentIndex = AppController.zernioYoutubeContentType === "shorts" ? 1 : 0
+        }
     }
 
     RowLayout {

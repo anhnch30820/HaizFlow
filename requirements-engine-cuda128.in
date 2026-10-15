@@ -5,6 +5,9 @@ torchvision==0.23.0+cu128
 whisperx==3.8.6
 pyannote-audio==4.0.7
 torchcodec==0.7.0
+# TorchCodec's CUDA video path links NPP dynamically on Linux. PyTorch does
+# not declare this package because its own kernels do not require it.
+nvidia-npp-cu12==12.4.1.87; sys_platform == "linux"
 transformers==4.57.6
 accelerate==1.14.0
 ctranslate2==4.8.1

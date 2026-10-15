@@ -1,3 +1,4 @@
+import os
 import sys
 import tempfile
 import threading
@@ -62,7 +63,8 @@ class MediaProbeTests(unittest.TestCase):
             self.assertEqual(ffmpeg.get_video_duration("clip.mp4", timeout_seconds=9), 42.5)
 
         self.assertEqual(run.call_args.kwargs["timeout"], 9.0)
-        self.assertTrue(str(run.call_args.args[0][0]).lower().endswith("ffprobe.exe"))
+        expected_name = "ffprobe.exe" if os.name == "nt" else "ffprobe"
+        self.assertEqual(Path(run.call_args.args[0][0]).name.lower(), expected_name)
 
     def test_integrity_scan_rejects_a_truncated_source(self):
         completed = type("Completed", (), {"returncode": 1, "stderr": "Invalid NAL unit"})()

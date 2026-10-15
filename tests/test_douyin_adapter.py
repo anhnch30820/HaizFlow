@@ -627,6 +627,21 @@ def test_browser_version_is_adopted_with_matching_native_transport():
     assert profile.major == 145 and "Chrome/145.0.7632.6" in profile.ua
 
 
+def test_linux_browser_profile_uses_nearest_native_transport():
+    values = {
+        "userAgent": ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/149.0.7827.196 Safari/537.36"),
+        "platform": "Linux x86_64", "width": 1920, "height": 1080,
+        "language": "zh-CN", "cores": 8, "memory": 8,
+    }
+    profile = BrowserProfile.from_browser(values)
+    with patch("curl_cffi.requests.Session") as factory:
+        transport = DouyinTransport(profile)
+        transport.close()
+    factory.assert_called_once_with(impersonate="chrome150", default_headers=False)
+    assert profile.platform == "Linux x86_64"
+
+
 def test_channel_scan_respects_budget_when_upstream_ignores_count():
     posts = [{"aweme_id": str(n), "desc": "video", "author": {"nickname": "Creator"},
               "video": {"duration": 1200, "play_addr": {"url_list": ["https://cdn.example/video.mp4"]}}}

@@ -2,6 +2,28 @@ pragma Singleton
 import QtQuick
 
 QtObject {
+    function portableGlyph(glyph) {
+        const symbols = ({
+            "\uE70D": "▼", "\uE70E": "▲", "\uE70F": "✎", "\uE710": "+",
+            "\uE711": "×", "\uE712": "⋯", "\uE713": "⚙", "\uE714": "▣",
+            "\uE71A": "■", "\uE71B": "↗", "\uE71C": "≡", "\uE71F": "−",
+            "\uE720": "●", "\uE721": "⌕", "\uE72A": "→", "\uE72B": "←",
+            "\uE72C": "↻", "\uE72E": "▣", "\uE734": "☆", "\uE738": "−",
+            "\uE73E": "✓", "\uE73F": "↙", "\uE740": "↗", "\uE74D": "⌫",
+            "\uE74F": "⊘", "\uE767": "◖", "\uE768": "▶", "\uE769": "Ⅱ",
+            "\uE76C": "▤", "\uE777": "↺", "\uE77F": "▣", "\uE785": "◇",
+            "\uE789": "➤", "\uE7A6": "↪", "\uE7A7": "↩", "\uE7BA": "△",
+            "\uE7C3": "⌁", "\uE80F": "⌂", "\uE890": "◉", "\uE892": "◀",
+            "\uE893": "▶", "\uE896": "↓", "\uE897": "?", "\uE898": "↑",
+            "\uE8A3": "+", "\uE8A7": "↗", "\uE8B7": "▰", "\uE8C6": "✂",
+            "\uE8C8": "▣", "\uE8CB": "↕", "\uE8D2": "T", "\uE8D6": "♫",
+            "\uE8FD": "▦", "\uE922": "□", "\uE923": "▣", "\uE946": "i",
+            "\uE995": "S", "\uE9D9": "⚙", "\uEA39": "!", "\uEB9F": "▧",
+            "\uED1A": "○", "\uF7E8": "⌁"
+        })
+        return symbols[glyph] || glyph
+    }
+
     function asset(name, accent) {
         const variant = accent ? "accent" : "muted"
         switch (name) {
