@@ -18,6 +18,10 @@ pnpm-lock.yaml
 data/
 .cache/
 **/.cache/
+runtime/cache/
+runtime/models/
+runtime/packages/
+runtime/tmp/
 .pytest_cache/
 .ruff_cache/
 .ipynb_checkpoints/
