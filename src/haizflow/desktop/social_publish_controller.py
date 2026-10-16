@@ -1436,6 +1436,7 @@ class SocialPublishController:
                 self.default_caption,
                 self.default_hashtags,
                 self.count,
+                self._import_duration_limit(),
             ),
             name="haizflow-social-import",
             daemon=True,
@@ -1443,7 +1444,9 @@ class SocialPublishController:
         self._worker.start()
         return True
 
-    def _import_worker(self, project_key, project_root, sources, caption, hashtags, starting_order) -> None:
+    def _import_worker(
+        self, project_key, project_root, sources, caption, hashtags, starting_order, duration_limit
+    ) -> None:
         imported = 0
         errors: list[str] = []
         media_dir = tiktok_publish.media_directory(project_root)
@@ -1484,8 +1487,9 @@ class SocialPublishController:
                 os.replace(temporary, destination)
                 imported_destination = True
                 duration = get_video_duration(destination, timeout_seconds=20.0)
-                if duration < 3.0 or duration > 600.0:
-                    raise ValueError("Videos must be between 3 seconds and 10 minutes long.")
+                if duration < 3.0 or duration > duration_limit:
+                    maximum = "12 hours" if duration_limit > 600.0 else "10 minutes"
+                    raise ValueError(f"Videos must be between 3 seconds and {maximum} long.")
                 width, height = get_video_dimensions(destination, timeout_seconds=20.0)
                 create_video_thumbnail_path(destination, thumbnail_path, cancel_event=self._cancel)
                 item = tiktok_publish.new_item(
@@ -2608,7 +2612,15 @@ class SocialPublishController:
             return "Facebook Reels must be 60 seconds or shorter."
         elif platform == "instagram" and duration > 90.0:
             return "Instagram Reels must be 90 seconds or shorter."
+        elif platform == "tiktok" and duration > 600.0:
+            return "TikTok videos must be 10 minutes or shorter."
         return ""
+
+    def _import_duration_limit(self) -> float:
+        """Allow long-form media only when the active target is YouTube Video."""
+        if self.selected_platform == "youtube" and self.youtube_content_type == "video":
+            return 12 * 60 * 60
+        return 10 * 60
 
     @staticmethod
     def _supported_file(path: str) -> bool:

@@ -496,6 +496,97 @@ def batch_filename(video) -> str:
     return export_filename(f"{project_store.safe_project_name(Path(video.original_filename).stem)[:70]}--{video.video_id[:12]}")
 
 
+def merge_exported_videos(inputs, destination, *, cancel=None, progress=None):
+    """Join completed exports in order, normalizing mixed dimensions and audio."""
+    from haizflow.pipeline.render import _ffmpeg_progress_fraction
+    from haizflow.utils.ffmpeg import (
+        _binary, get_media_stream_types, get_video_dimensions, get_video_duration, validate_video_integrity,
+    )
+
+    sources = [Path(item).resolve() for item in inputs]
+    if not sources or any(not item.is_file() for item in sources):
+        raise FileNotFoundError("One or more videos to merge are unavailable.")
+    target = validate_export_destination(destination)
+    dimensions = [get_video_dimensions(str(item)) for item in sources]
+    width = max(value[0] for value in dimensions)
+    height = max(value[1] for value in dimensions)
+    width += width % 2
+    height += height % 2
+    durations = [get_video_duration(str(item)) for item in sources]
+    command = [_binary("ffmpeg"), "-y", "-hide_banner", "-loglevel", "error"]
+    video_indexes, audio_indexes = [], []
+    input_index = 0
+    for source, duration in zip(sources, durations):
+        command += ["-i", str(source)]
+        video_indexes.append(input_index)
+        if "audio" in get_media_stream_types(str(source)):
+            audio_indexes.append(input_index)
+            input_index += 1
+        else:
+            input_index += 1
+            command += ["-f", "lavfi", "-t", f"{duration:.6f}", "-i", "anullsrc=r=48000:cl=stereo"]
+            audio_indexes.append(input_index)
+            input_index += 1
+    filters, pairs = [], []
+    for index, (video_index, audio_index) in enumerate(zip(video_indexes, audio_indexes)):
+        filters.append(
+            f"[{video_index}:v:0]scale={width}:{height}:force_original_aspect_ratio=decrease,"
+            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p[v{index}]"
+        )
+        filters.append(
+            f"[{audio_index}:a:0]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[a{index}]"
+        )
+        pairs.append(f"[v{index}][a{index}]")
+    filters.append(f"{''.join(pairs)}concat=n={len(sources)}:v=1:a=1[outv][outa]")
+    temporary = target.with_name(f".{target.stem}.merging{target.suffix}")
+    meter = target.with_name(f".{target.stem}.merge-progress.txt")
+    process = None
+    try:
+        temporary.unlink(missing_ok=True)
+        meter.unlink(missing_ok=True)
+        command += [
+            "-filter_complex", ";".join(filters), "-map", "[outv]", "-map", "[outa]",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-c:a", "aac", "-b:a", "192k",
+            "-movflags", "+faststart", "-progress", str(meter), "-stats_period", "0.3", "-nostats", str(temporary),
+        ]
+        process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
+                                   encoding="utf-8", errors="replace",
+                                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        previous = -1
+        while True:
+            if cancel is not None and cancel.is_set():
+                raise ExportCancelled("Export cancelled.")
+            try:
+                _stdout, error = process.communicate(timeout=.2)
+                break
+            except subprocess.TimeoutExpired:
+                try:
+                    fraction = _ffmpeg_progress_fraction(meter.read_text(encoding="utf-8"), sum(durations))
+                except (OSError, UnicodeError):
+                    fraction = None
+                value = min(99, round(max(0, fraction or 0) * 100))
+                if progress and value > previous:
+                    previous = value
+                    progress(value)
+        if process.returncode:
+            raise RuntimeError(f"Could not merge videos: {error[-900:]}")
+        validate_video_integrity(str(temporary))
+        temporary.replace(target)
+    finally:
+        if process and process.poll() is None:
+            process.terminate()
+            try:
+                process.communicate(timeout=2)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.communicate()
+        meter.unlink(missing_ok=True)
+        temporary.unlink(missing_ok=True)
+    if progress:
+        progress(100)
+    return str(target)
+
+
 def output_dimensions(width: int, height: int, preset: str) -> tuple[int, int]:
     limit = int(preset_settings(preset)["height"])
     if width <= 0 or height <= 0:

@@ -606,6 +606,45 @@ class RenderExportStorageTests(unittest.TestCase):
         self.assertEqual(self.exporter.jobs[0]["status"], "rendering")
         self.assertIsNone(self.exporter.worker)
 
+    def test_batch_merge_runs_after_source_exports_in_queue_order(self):
+        project, first = self.make_video(kind="batch", name="Combined project", content=b"first")
+        config = VideoConfig(project_name=project["project_name"], project_directory=project["project_directory"],
+                             project_key=project["key"], project_id=project["project_id"], project_type="batch")
+        second = video_store.create_video(str(uuid.uuid4()), "Second.mp4", config)
+        Path(second.files["video_input"]).write_bytes(b"owned-source-2")
+        second = video_store.update_video(second.video_id, status="done", checkpoints={"render": "completed-render"})
+        revision = video_export.render_revision(second)
+        staging = manual_artifacts.create_staging_directory(second.video_id, "export")
+        (staging / "video.mp4").write_bytes(b"second")
+        record = manual_artifacts.publish(second.video_id, "export", revision, staging, {"video": "video.mp4"},
+                                          config_fingerprint=revision)
+        second = video_store.update_video(second.video_id,
+                                          files=dict(second.files, final_video=record["resolved_outputs"]["video"]))
+        self.host._selected_project_key = project["key"]
+        self.host._batch_video_ids = [first.video_id, second.video_id]
+        merged_calls = []
+
+        def merge(inputs, target, **kwargs):
+            merged_calls.append(list(inputs))
+            Path(target).write_bytes(b"merged")
+            kwargs["progress"](100)
+            return target
+
+        self.exporter.merger = merge
+        self.assertTrue(self.exporter.start_batch_to(
+            project["key"], self.host._batch_video_ids, "source", str(self.external),
+            process=False, merge=True,
+        ))
+        self.exporter.worker.join(timeout=10)
+        self.exporter.poll()
+        self.exporter.worker.join(timeout=10)
+        self.exporter.poll()
+        source_jobs = [job for job in self.exporter.jobs if not job.get("isMerge")]
+        merge_job = next(job for job in self.exporter.jobs if job.get("isMerge"))
+        self.assertEqual(merged_calls, [[job["path"] for job in source_jobs]])
+        self.assertEqual(merge_job["status"], "done")
+        self.assertEqual(Path(merge_job["path"]).read_bytes(), b"merged")
+
     def test_batch_processing_preflight_failure_keeps_preset_and_status(self):
         project, video = self.make_video(kind="batch")
         self.host._selected_project_key = project["key"]

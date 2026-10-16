@@ -11,15 +11,17 @@ from haizflow.desktop.localization import QFileDialog, QMessageBox, native_media
 from haizflow.services import desktop_settings, video_store
 from haizflow.services.video_export import (
     EXPORT_PRESETS, ExportCancelled, adopt_legacy_render, batch_filename, current_render, destination_identity,
-    export_filename, export_video, legacy_render_owned, preset_settings, project_display_name, validate_export_destination,
+    export_filename, export_video, legacy_render_owned, merge_exported_videos, preset_settings, project_display_name,
+    validate_export_destination,
 )
 
 
 class VideoExportController(QObject):
-    def __init__(self, host, *, copier=export_video):
+    def __init__(self, host, *, copier=export_video, merger=merge_exported_videos):
         super().__init__(host)
         self.host = host
         self.copier = copier
+        self.merger = merger
         self.jobs: list[dict] = []
         self.cancel = threading.Event()
         self.worker: threading.Thread | None = None
@@ -42,7 +44,7 @@ class VideoExportController(QObject):
                     or self._pending_run_cleanup
                     or any(discard_pending(job["videoId"], job.get("runScopeId")) for job in self.jobs
                            if job["status"] == "cancelled" and job.get("runScopeId"))
-                    or any(job["status"] == "rendering" for job in self.jobs)
+                    or any(job["status"] in {"rendering", "waiting_to_merge"} for job in self.jobs)
                     or any(self.host._processing_queue.token_for(key) == token
                            for key, token in self._cancelling_render_tokens.items()))
 
@@ -100,7 +102,8 @@ class VideoExportController(QObject):
         videos = [video for video in videos if video]
         result = self.settings(videos[0]) if videos else {}
         result.update(projectKey=str(self.host._selected_project_key or ""),
-                      videoIds=[video.video_id for video in videos], count=len(videos))
+                      videoIds=[video.video_id for video in videos], count=len(videos),
+                      mergeFilename=export_filename(project_display_name(videos[0])) if videos else "merged-video.mp4")
         return result
 
     def choose_batch_directory(self) -> str:
@@ -117,6 +120,12 @@ class VideoExportController(QObject):
                 if video:
                     target = validate_export_destination(Path(directory) / batch_filename(video))
                     targets.append((target, destination_identity(target)))
+            videos = [video_store.get_video(key) for key in self.host._batch_video_ids]
+            videos = [video for video in videos if video]
+            if videos:
+                merged = validate_export_destination(
+                    Path(directory) / export_filename(project_display_name(videos[0])))
+                targets.append((merged, destination_identity(merged)))
             existing = sum(target.exists() for target, _identity in targets)
             if existing and QMessageBox.question(
                 None, self.text("Thay thế video đã có?", "Replace existing videos?"),
@@ -134,8 +143,10 @@ class VideoExportController(QObject):
         return str(Path(directory).resolve())
 
     def batch_destination_exists(self, directory) -> bool:
-        return any((Path(directory) / batch_filename(video)).exists()
-                   for key in self.host._batch_video_ids if (video := video_store.get_video(key)))
+        videos = [video_store.get_video(key) for key in self.host._batch_video_ids]
+        videos = [video for video in videos if video]
+        return (any((Path(directory) / batch_filename(video)).exists() for video in videos)
+                or bool(videos and (Path(directory) / export_filename(project_display_name(videos[0]))).exists()))
 
     def _set_jobs(self, jobs):
         # Paused exports from another project must survive navigation and a
@@ -263,7 +274,8 @@ class VideoExportController(QObject):
         self.changed()
         return True
 
-    def start_batch_to(self, project_key, video_ids, preset, directory, *, overwrite=False, process=True) -> bool:
+    def start_batch_to(self, project_key, video_ids, preset, directory, *, overwrite=False, process=True,
+                       merge=False) -> bool:
         """Capture destinations and validate the whole batch before enqueueing."""
         if (self.busy or not video_ids or project_key != str(self.host._selected_project_key or "")
                 or list(video_ids) != list(self.host._batch_video_ids)):
@@ -286,6 +298,17 @@ class VideoExportController(QObject):
                              "status": "rendering" if process else "pending", "progress": 0, "error": "",
                              "overwrite": bool(overwrite), "process": bool(process),
                              "targetIdentity": self._chosen_targets.get(str(target), destination_identity(target))})
+            if merge:
+                merged_target = validate_export_destination(
+                    Path(directory) / export_filename(project_display_name(videos[0])))
+                if merged_target.exists() and not overwrite:
+                    raise FileExistsError(str(merged_target))
+                jobs.append({"videoId": f"merge:{project_key}", "name": merged_target.name,
+                             "path": str(merged_target), "status": "waiting_to_merge", "progress": 0,
+                             "error": "", "overwrite": bool(overwrite), "process": False, "isMerge": True,
+                             "sourcePaths": [item["path"] for item in jobs],
+                             "targetIdentity": self._chosen_targets.get(
+                                 str(merged_target), destination_identity(merged_target))})
         except (OSError, ValueError) as exc:
             self.alert(exc)
             return False
@@ -342,6 +365,8 @@ class VideoExportController(QObject):
         else:
             ready = []
             for job in jobs:
+                if job.get("isMerge"):
+                    continue
                 video = video_store.get_video(job["videoId"])
                 if current_render(video, verify=False):
                     ready.append(job)
@@ -393,6 +418,15 @@ class VideoExportController(QObject):
                 continue
             self.events.put((identifier, "exporting", 0, ""))
             try:
+                if job.get("isMerge"):
+                    target = Path(job["path"])
+                    if target.exists() and (not job.get("overwrite")
+                            or destination_identity(target) != job.get("targetIdentity")):
+                        raise FileExistsError(str(target))
+                    self.merger(job["sourcePaths"], job["path"], cancel=self.cancel,
+                                progress=lambda value, key=identifier: self.events.put((key, "exporting", value, "")))
+                    self.events.put((identifier, "done", 100, ""))
+                    continue
                 if not job.get("runScopeId"):
                     from haizflow.services.processing_runs import commit_previous_ready
 
@@ -491,6 +525,15 @@ class VideoExportController(QObject):
         self.cancel.clear()
         ready = []
         for job in jobs:
+            if job.get("isMerge"):
+                sources = [item for item in self.jobs if not item.get("isMerge")]
+                if sources and all(item["status"] == "done" for item in sources):
+                    ready.append(job)
+                else:
+                    job.update(status="failed", error=self.text(
+                        "Không thể gộp vì có video thành phần bị lỗi.",
+                        "Cannot merge because one or more source videos failed."))
+                continue
             video = video_store.get_video(job["videoId"])
             if video and (job.get("rangeMs") or (
                     (video.project_type == "manual" or video.status == "done") and current_render(video, verify=False))):
@@ -571,6 +614,18 @@ class VideoExportController(QObject):
                 changed = True
                 if status == "done":
                     self.host.videoExportCompleted.emit(identifier, job["path"])
+        merge_job = next((item for item in self.jobs if item.get("isMerge")
+                          and item["status"] == "waiting_to_merge"), None)
+        source_jobs = [item for item in self.jobs if not item.get("isMerge")]
+        if merge_job and source_jobs and all(item["status"] in {"done", "failed", "cancelled"} for item in source_jobs):
+            if any(item["status"] != "done" for item in source_jobs):
+                merge_job.update(status="failed", error=self.text(
+                    "Không thể gộp vì có video thành phần bị lỗi.",
+                    "Cannot merge because one or more source videos failed."))
+            elif not (self.worker and self.worker.is_alive()):
+                merge_job["status"] = "pending"
+                self.launch([merge_job])
+            changed = True
         for job in self.jobs:
             if (job.get("runScopeId") and not job.get("runSettled") and job["status"] in {"done", "failed", "cancelled"}
                     and not self.host._processing_queue.contains(job["videoId"])):
@@ -584,7 +639,7 @@ class VideoExportController(QObject):
                 job["runSettled"] = complete
                 pending_cleanup = pending_cleanup or not complete
                 settled_run = settled_run or bool(job.get("runScopeId"))
-            if job["status"] not in {"rendering", "paused", "awaiting_review"}:
+            if job.get("isMerge") or job["status"] not in {"rendering", "paused", "awaiting_review"}:
                 continue
             video = video_store.get_video(job["videoId"])
             if video:

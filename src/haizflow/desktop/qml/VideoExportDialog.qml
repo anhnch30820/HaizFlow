@@ -12,6 +12,7 @@ AppDialog {
     property bool destinationExists: false
     property bool processBeforeExport: false
     property bool batchMode: false
+    property bool mergeBatch: false
     title: batchMode ? qsTr("Xử lý và xuất hàng loạt") : processBeforeExport ? qsTr("Xử lý và xuất video") : qsTr("Xuất video")
     subtitle: ""
     preferredWidth: 600
@@ -19,6 +20,7 @@ AppDialog {
 
     function openForSelection(processFirst = false) {
         batchMode = false;
+        mergeBatch = false;
         processBeforeExport = processFirst;
         configuration = controller.manualExportSettings();
         exportRange.currentIndex = 0;
@@ -28,9 +30,10 @@ AppDialog {
         open();
     }
     function openForProcessing() { openForSelection(true); }
-    function openForBatch(processFirst = true) {
+    function openForBatch(processFirst = true, merge = false) {
         openForSelection(processFirst);
         batchMode = true;
+        mergeBatch = merge;
         configuration = controller.batchExportSettings();
         quality.currentIndex = Math.max(0, (configuration.presets || []).findIndex(item => item.value === configuration.preset));
     }
@@ -136,6 +139,25 @@ AppDialog {
             }
         }
     }
+    ColumnLayout {
+        Layout.fillWidth: true
+        visible: root.batchMode && (root.configuration.count || 0) > 1
+        spacing: Theme.space4
+        StudioCheckBox {
+            Layout.fillWidth: true
+            text: qsTr("Gộp thêm thành 1 video")
+            checked: root.mergeBatch
+            onToggled: root.mergeBatch = checked
+        }
+        Text {
+            Layout.fillWidth: true
+            text: qsTr("Nối theo thứ tự hàng đợi; vẫn giữ các video riêng.")
+            color: Theme.textMuted
+            font.family: Theme.fontFamily
+            font.pixelSize: TypeScale.metadata
+            wrapMode: Text.WordWrap
+        }
+    }
     footerActions: [
         StudioButton { text: qsTr("Hủy"); variant: "ghost"; onClicked: root.close() },
         DeferredActionButton {
@@ -148,14 +170,15 @@ AppDialog {
             actionContext: ({ batch: root.batchMode, process: root.processBeforeExport,
                 projectKey: root.configuration.projectKey || "", videoIds: root.configuration.videoIds || [],
                 videoId: root.configuration.videoId || "", preset: quality.currentValue,
-                destination: root.destination, overwrite: root.destinationExists, segmentId: exportRange.currentValue || "" })
+                destination: root.destination, overwrite: root.destinationExists, merge: root.mergeBatch,
+                segmentId: exportRange.currentValue || "" })
             onExecute: context => {
                 if (!context || context.videoId !== (root.configuration.videoId || "")
                         || context.projectKey !== (root.configuration.projectKey || ""))
                     return;
                 const started = context.batch
                     ? root.controller.processBatchTo(context.projectKey, context.videoIds,
-                        context.preset, context.destination, context.overwrite, context.process)
+                        context.preset, context.destination, context.overwrite, context.process, context.merge)
                     : context.process
                     ? root.controller.processVideoTo(context.videoId, context.preset, context.destination, context.overwrite)
                     : context.segmentId

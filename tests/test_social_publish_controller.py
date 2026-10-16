@@ -715,6 +715,7 @@ class SocialPublishControllerTests(unittest.TestCase):
 
     def test_youtube_video_allows_long_horizontal_video(self):
         self.controller._state.update(selected_platform="youtube", youtube_content_type="video")
+        self.assertEqual(self.controller._import_duration_limit(), 12 * 60 * 60)
         self.assertEqual(
             self.controller._platform_video_error(
                 {
@@ -725,6 +726,16 @@ class SocialPublishControllerTests(unittest.TestCase):
                 }
             ),
             "",
+        )
+
+    def test_short_form_import_keeps_ten_minute_limit(self):
+        self.controller._state.update(selected_platform="tiktok", youtube_content_type="video")
+        self.assertEqual(self.controller._import_duration_limit(), 10 * 60)
+        self.assertIn(
+            "10 minutes",
+            self.controller._platform_video_error(
+                {"file_path": "clip.mp4", "duration_seconds": 601}
+            ),
         )
 
     def test_meta_reels_reject_webm_and_platform_duration_limits(self):

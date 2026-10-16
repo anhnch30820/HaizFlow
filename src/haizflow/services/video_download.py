@@ -86,6 +86,11 @@ _NETWORK_RETRY_ERROR_MARKERS = (
     "read timed out",
     "read operation timed out",
     "incompleteread",
+    # yt-dlp's urllib handler formats truncated CDN responses as
+    # "N bytes read, M more expected" instead of exposing IncompleteRead.
+    # Bilibili media URLs are short-lived, so rebuild the extractor session
+    # and obtain a fresh manifest after its internal range retries are spent.
+    "more expected",
     "broken pipe",
     "winerror 10054",
     "winerror 10060",
@@ -437,7 +442,20 @@ def _download_format_selector(platform: str, *, require_audio: bool = True) -> s
     # `best` does not guarantee a progressive stream. TikTok/Douyin sometimes
     # rank a high-quality video-only HEVC format above the playable stream,
     # which used to import successfully and then fail during audio extraction.
-    if platform in {"TikTok", "Douyin"}:
+    if platform == "Bilibili":
+        # Anonymous Bilibili manifests often expose only progressive MP4
+        # formats and report both codecs as ``unknown``.  Codec predicates
+        # therefore reject every otherwise playable 360p/480p/720p stream.
+        # Bilibili's highest-bitrate anonymous audio CDN also intermittently
+        # returns a tiny error body while claiming the full media length. The
+        # 66/98 kbps AAC variants use a stable CDN route, so cap the preferred
+        # audio bitrate and retain the unrestricted choice as a last resort.
+        selector = (
+            "bestvideo[height<=1080][vcodec!=none]+bestaudio[ext=m4a][abr<=128]/"
+            "bestvideo[height<=1080][vcodec!=none]+bestaudio[acodec!=none]/"
+            "best[height<=1080]/best"
+        )
+    elif platform in {"TikTok", "Douyin"}:
         selector = (
             "best[vcodec!=none][acodec!=none]/"
             "bestvideo[vcodec!=none]+bestaudio[acodec!=none]"
@@ -449,9 +467,48 @@ def _download_format_selector(platform: str, *, require_audio: bool = True) -> s
             "best[vcodec!=none][acodec!=none]/"
             "bestvideo[vcodec!=none]+bestaudio[acodec!=none]"
         )
-    if not require_audio:
+    if not require_audio and platform != "Bilibili":
         selector += "/bestvideo[height<=1080][vcodec!=none]/best[vcodec!=none]/bestvideo[vcodec!=none]"
     return selector
+
+
+def _prefer_bilibili_backup_cdn() -> None:
+    """Make yt-dlp use Bilibili's signed backup CDN URLs when available.
+
+    The primary anonymous route currently returned in Vietnam is an Akamai
+    edge that frequently closes media responses after a few hundred bytes.
+    yt-dlp discards ``backupUrl`` while constructing formats, so switch the
+    play-info entries before its extractor flattens them.
+    """
+    try:
+        from yt_dlp.extractor.bilibili import BilibiliBaseIE
+    except (ImportError, AttributeError):
+        return
+    original = BilibiliBaseIE.extract_formats
+    if getattr(original, "_haizflow_backup_cdn", False):
+        return
+
+    def extract_formats(self, play_info):
+        dash = play_info.get("dash") if isinstance(play_info, dict) else None
+        if isinstance(dash, dict):
+            entries = list(dash.get("video") or []) + list(dash.get("audio") or [])
+            dolby = dash.get("dolby")
+            if isinstance(dolby, dict):
+                entries.extend(dolby.get("audio") or [])
+            flac = dash.get("flac")
+            if isinstance(flac, dict) and isinstance(flac.get("audio"), dict):
+                entries.append(flac["audio"])
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                backups = entry.get("backupUrl") or entry.get("backup_url") or []
+                if backups:
+                    entry["baseUrl"] = backups[0]
+                    entry["base_url"] = backups[0]
+        return original(self, play_info)
+
+    extract_formats._haizflow_backup_cdn = True
+    BilibiliBaseIE.extract_formats = extract_formats
 
 
 def _wait_for_retry(cancel_event: threading.Event | None, seconds: float) -> None:
@@ -680,6 +737,8 @@ def download_video(
     """Download one video and return its final MP4/MOV/MKV path."""
     os.makedirs(workspace, exist_ok=True)
     yt_dlp = _load_yt_dlp()
+    if metadata.platform == "Bilibili":
+        _prefer_bilibili_backup_cdn()
     last_update = {"progress": -1, "detail": "", "time": 0.0}
 
     def report(progress: int, detail: str) -> None:
@@ -731,6 +790,43 @@ def download_video(
                 "overwrites": True,
             }
         )
+        if metadata.platform == "Bilibili":
+            # Bilibili's public CDN regularly closes long range requests before
+            # the advertised Content-Length is reached. Keep a resumable part
+            # file, request small byte ranges, and allow enough retries to
+            # continue from the last byte instead of restarting a long video
+            # from zero. Parallel fragment requests make the public CDN more
+            # likely to terminate one of the connections on long videos.
+            options.update(
+                {
+                    "retries": 10,
+                    "fragment_retries": 10,
+                    "file_access_retries": 5,
+                    "http_chunk_size": 5 * 1024 * 1024,
+                    "concurrent_fragment_downloads": 1,
+                    "nopart": False,
+                    "continuedl": True,
+                }
+            )
+            # Akamai's Bilibili edge sometimes keeps returning a tiny error
+            # body for the same resumed byte range. yt-dlp's native HTTP
+            # downloader then exhausts its retries without advancing. On a
+            # fresh-manifest retry, curl reliably resumes across those edge
+            # disconnects and preserves the existing .part file.
+            if attempt > 0:
+                options.update(
+                    {
+                        "external_downloader": {"default": "curl"},
+                        "external_downloader_args": {
+                            "curl": [
+                                "--retry", "30",
+                                "--retry-all-errors",
+                                "--retry-delay", "1",
+                                "--continue-at", "-",
+                            ]
+                        },
+                    }
+                )
         try:
             # A new YoutubeDL instance on every attempt forces a fresh media
             # manifest.  TikTok's signed URLs can expire between inspection

@@ -287,6 +287,7 @@ ApplicationWindow {
         function onVideoExportRequested() { videoExportDialogLoader.invoke("openForSelection", []); }
         function onAutoProcessingRequested() { videoExportDialogLoader.invoke("openForProcessing", []); }
         function onBatchProcessingRequested(processFirst) { videoExportDialogLoader.invoke("openForBatch", [processFirst]); }
+        function onBatchMergeRequested() { videoExportDialogLoader.invoke("openForBatch", [false, true]); }
         function onVideoExportStarted() { videoExportJobsDialogLoader.invoke("open", []); }
         function onVideoExportProgressRequested() { videoExportJobsDialogLoader.invoke("open", []); }
     }

@@ -153,6 +153,16 @@ Item {
                 onClicked: root.requestBatchSettings()
             }
 
+            StudioButton {
+                visible: !AppController.isBatchRunning && AppController.batchCount > 1
+                    && AppController.batchCompletedCount === AppController.batchCount
+                text: qsTr("Gộp video")
+                iconGlyph: "\uE8B7"
+                variant: "secondary"
+                enabled: !AppController.videoExportBusy
+                onClicked: AppController.requestBatchMerge()
+            }
+
             DeferredActionButton {
                 objectName: "batchProcessButton"
                 visible: !AppController.isBatchRunning

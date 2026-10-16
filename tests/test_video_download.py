@@ -175,6 +175,14 @@ class VideoDownloadTests(unittest.TestCase):
             )
         )
 
+    def test_truncated_bilibili_response_refreshes_the_media_manifest(self):
+        error = RuntimeError(
+            "[download] Got error: 140 bytes read, 43792951 more expected. "
+            "Giving up after 10 retries"
+        )
+
+        self.assertTrue(video_download._is_retryable_download_error(error, "Bilibili"))
+
     def test_ffprobe_postprocessing_failures_are_retried(self):
         error = RuntimeError("Postprocessing: WARNING: unable to obtain file audio codec with ffprobe")
         self.assertTrue(video_download._is_retryable_download_error(error, "TikTok"))
@@ -318,6 +326,103 @@ class VideoDownloadTests(unittest.TestCase):
                 self.assertRaisesRegex(RuntimeError, "does not contain an audio track"),
             ):
                 video_download.download_video(metadata, workspace)
+
+    def test_bilibili_accepts_progressive_formats_with_unknown_codecs(self):
+        selector = video_download._download_format_selector("Bilibili")
+
+        self.assertTrue(selector.endswith("/best[height<=1080]/best"))
+        self.assertIn("bestaudio[ext=m4a][abr<=128]", selector)
+        self.assertIn("bestvideo[height<=1080][vcodec!=none]+bestaudio[acodec!=none]", selector)
+
+    def test_bilibili_backup_cdn_replaces_primary_urls_before_format_extraction(self):
+        from yt_dlp.extractor.bilibili import BilibiliBaseIE
+
+        video_download._prefer_bilibili_backup_cdn()
+        instance = object.__new__(BilibiliBaseIE)
+        play_info = {
+            "dash": {
+                "audio": [{
+                    "id": 30216,
+                    "baseUrl": "https://primary.invalid/audio.m4s",
+                    "backupUrl": ["https://backup.example/audio.m4s"],
+                    "mimeType": "audio/mp4",
+                    "codecs": "mp4a.40.2",
+                }],
+                "video": [],
+            }
+        }
+
+        formats = instance.extract_formats(play_info)
+
+        self.assertEqual(formats[0]["url"], "https://backup.example/audio.m4s")
+
+    def test_bilibili_download_uses_resumable_retries(self):
+        downloader = mock.MagicMock()
+        downloader.__enter__.return_value = downloader
+        metadata = video_download.VideoMetadata(
+            url="https://www.bilibili.com/video/BV1demo",
+            title="Long Bilibili video",
+            platform="Bilibili",
+            duration_seconds=1900,
+            thumbnail_url="",
+            uploader="",
+        )
+
+        with tempfile.TemporaryDirectory() as workspace:
+            output = Path(workspace) / "video.mp4"
+            output.write_bytes(b"video")
+            downloader.extract_info.return_value = {"filepath": str(output), "ext": "mp4"}
+            downloader.prepare_filename.return_value = str(output)
+            yt_dlp = mock.MagicMock()
+            yt_dlp.YoutubeDL.return_value = downloader
+            with (
+                mock.patch.object(video_download, "_load_yt_dlp", return_value=yt_dlp),
+                mock.patch.object(video_download, "get_media_stream_types", return_value={"video", "audio"}),
+            ):
+                video_download.download_video(metadata, workspace)
+
+        options = yt_dlp.YoutubeDL.call_args.args[0]
+        self.assertEqual(options["retries"], 10)
+        self.assertEqual(options["fragment_retries"], 10)
+        self.assertEqual(options["http_chunk_size"], 5 * 1024 * 1024)
+        self.assertEqual(options["concurrent_fragment_downloads"], 1)
+        self.assertFalse(options["nopart"])
+        self.assertTrue(options["continuedl"])
+
+    def test_bilibili_fresh_manifest_retry_uses_curl_resume(self):
+        first = mock.MagicMock()
+        first.__enter__.return_value = first
+        first.extract_info.side_effect = RuntimeError(
+            "[download] Got error: 628 bytes read, 5009981 more expected"
+        )
+        second = mock.MagicMock()
+        second.__enter__.return_value = second
+        metadata = video_download.VideoMetadata(
+            url="https://www.bilibili.com/video/BV1demo",
+            title="Bilibili retry",
+            platform="Bilibili",
+            duration_seconds=400,
+            thumbnail_url="",
+            uploader="",
+        )
+
+        with tempfile.TemporaryDirectory() as workspace:
+            output = Path(workspace) / "video.mp4"
+            output.write_bytes(b"video")
+            second.extract_info.return_value = {"filepath": str(output), "ext": "mp4"}
+            second.prepare_filename.return_value = str(output)
+            yt_dlp = mock.MagicMock()
+            yt_dlp.YoutubeDL.side_effect = [first, second]
+            with (
+                mock.patch.object(video_download, "_load_yt_dlp", return_value=yt_dlp),
+                mock.patch.object(video_download, "_wait_for_retry"),
+                mock.patch.object(video_download, "get_media_stream_types", return_value={"video", "audio"}),
+            ):
+                video_download.download_video(metadata, workspace)
+
+        retry_options = yt_dlp.YoutubeDL.call_args_list[1].args[0]
+        self.assertEqual(retry_options["external_downloader"], {"default": "curl"})
+        self.assertIn("--retry-all-errors", retry_options["external_downloader_args"]["curl"])
 
     def test_cancelled_download_stops_before_network_work(self):
         event = threading.Event()

@@ -229,6 +229,7 @@ class HaizFlowController(QObject):
     videoExportProgressRequested = Signal()
     autoProcessingRequested = Signal()
     batchProcessingRequested = Signal(bool)
+    batchMergeRequested = Signal()
     videoExportStarted = Signal()
     manualSubtitleSaved = Signal(str, int, str)
     manualSubtitleSaveFailed = Signal(str, str, str)
@@ -4403,6 +4404,12 @@ class HaizFlowController(QObject):
         if self._batch_video_ids and not self.isBatchRunning and not self.videoExportBusy:
             self.batchProcessingRequested.emit(True)
 
+    @Slot()
+    def requestBatchMerge(self):
+        if (len(self._batch_video_ids) > 1 and self.batchCompletedCount == len(self._batch_video_ids)
+                and not self.isBatchRunning and not self.videoExportBusy):
+            self.batchMergeRequested.emit()
+
     @Slot(result="QVariantMap")
     def batchExportSettings(self):
         return self._video_exports.batch_settings()
@@ -4415,10 +4422,11 @@ class HaizFlowController(QObject):
     def batchExportDestinationExists(self, directory):
         return self._video_exports.batch_destination_exists(directory)
 
-    @Slot(str, "QVariantList", str, str, bool, bool, result=bool)
-    def processBatchTo(self, project_key, video_ids, preset, directory, overwrite, process):
+    @Slot(str, "QVariantList", str, str, bool, bool, bool, result=bool)
+    def processBatchTo(self, project_key, video_ids, preset, directory, overwrite, process, merge):
         started = self._video_exports.start_batch_to(
-            str(project_key), list(video_ids), str(preset), str(directory), overwrite=bool(overwrite), process=bool(process),
+            str(project_key), list(video_ids), str(preset), str(directory), overwrite=bool(overwrite),
+            process=bool(process), merge=bool(merge),
         )
         if started:
             self.videoExportStarted.emit()

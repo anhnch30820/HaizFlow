@@ -2363,7 +2363,9 @@ Module {
         Method { name: "openExportDestinationFolder"; Parameter { name: "a1"; type: "QString" } }
         Method { name: "openVideoFolder" }
         Signal { name: "batchProcessingRequested"; Parameter { name: "processFirst"; type: "bool" } }
+        Signal { name: "batchMergeRequested" }
         Method { name: "requestBatchProcessing" }
+        Method { name: "requestBatchMerge" }
         Method { name: "batchExportSettings"; type: "QVariantMap" }
         Method { name: "chooseBatchExportDestination"; type: "QString" }
         Method { name: "batchExportDestinationExists"; type: "bool"; Parameter { name: "directory"; type: "QString" } }
@@ -2374,6 +2376,7 @@ Module {
             Parameter { name: "directory"; type: "QString" }
             Parameter { name: "overwrite"; type: "bool" }
             Parameter { name: "process"; type: "bool" }
+            Parameter { name: "merge"; type: "bool" }
         }
         Method { name: "applyBatchSettingsValues"; type: "bool"
             Parameter { name: "projectKey"; type: "QString" }
