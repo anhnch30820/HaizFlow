@@ -106,7 +106,7 @@ class DropdownToggleTests(unittest.TestCase):
             property int zernioConnectedAccountCount: 1; property bool zernioCanPostMore: true;
         }'''
         cases = [
-            ("SocialPublishRow.qml", '''index: 0; fileName: "Test"; caption: ""; hashtags: "";
+            ("SocialPublishRow.qml", '''index: 0; fileName: "Test"; postTitle: "Title"; caption: ""; hashtags: "";
                 postText: ""; publishStatus: "draft"; publishError: ""; thumbnailSource: "";
                 uploadProgress: 0; zernioPostId: ""; platformPostUrl: "";
                 platformPostUrlVerified: false; targetPlatform: "tiktok";''',

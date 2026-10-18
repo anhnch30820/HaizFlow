@@ -138,6 +138,26 @@ def synthesize_batch_to_mp3(items, video_id, *, device="cpu", language_id="vi",
             raise ValueError("Không thể tạo giọng VieNeu cho câu trống.")
     if not items:
         return
+    # Identical lines with the same speaker need only one validated inference.
+    # Re-sampling every repeated reaction wastes time and introduces new
+    # quality failures after an identical line has already succeeded.
+    grouped = {}
+    for item in items:
+        identity = (str(item["text"]), str(item["voice"]), str(item.get("reference_path") or ""))
+        grouped.setdefault(identity, []).append(item)
+    if len(grouped) < len(items):
+        unique = [group[0] for group in grouped.values()]
+        synthesize_batch_to_mp3(unique, video_id, device=device, language_id=language_id,
+                                process_registry_id=process_registry_id)
+        for group in grouped.values():
+            for duplicate in group[1:]:
+                target = Path(duplicate["output_path"])
+                target.parent.mkdir(parents=True, exist_ok=True)
+                if target.resolve() != Path(group[0]["output_path"]).resolve():
+                    shutil.copyfile(group[0]["output_path"], target)
+        if progress_callback:
+            progress_callback(len(items), len(items), "completed")
+        return
     cancellation_id = process_registry_id or video_id
     check_cancellation(cancellation_id)
     if progress_callback:
@@ -149,6 +169,13 @@ def synthesize_batch_to_mp3(items, video_id, *, device="cpu", language_id="vi",
     with tempfile.TemporaryDirectory(prefix="vieneu-", dir=TMP_DIR) as work:
         work = Path(work)
         entries = [{**item, "wav": str(work / f"{index}.wav")} for index, item in enumerate(items)]
+        for entry in entries:
+            text = str(entry["text"]).strip()
+            # Give isolated one-word reactions a natural phrase boundary.
+            # Apply before batching: several such lines may occur in one job,
+            # so repairing only the first failing item exhausts retries.
+            if len(text.split()) == 1 and text.endswith(("!", "?", "！", "？")):
+                entry["text"] = text.rstrip("!?！？.") + "…"
         from haizflow.utils.ffmpeg import _binary
 
         references = {}
@@ -220,6 +247,32 @@ def synthesize_batch_to_mp3(items, video_id, *, device="cpu", language_id="vi",
         check_cancellation(cancellation_id)
         if monitor_errors:
             raise monitor_errors[0]
+        # Installed engines may predate the in-worker retry policy. Retry a
+        # quality failure here too, using the same request and speaker voices.
+        for retry in range(2):
+            if not process.returncode or "Short utterance audio is incomplete" not in str(stderr):
+                break
+            check_cancellation(cancellation_id)
+            log_to_video(video_id, f"[TTS][VIENEU] Retrying short speech quality failure ({retry + 1}/2).")
+            # A frozen engine can deterministically truncate an exclamation
+            # such as "Cậu!" on every launch. Change only terminal punctuation
+            # on the failed item, keeping all spoken words and its voice.
+            failed_status = json.loads(status_path.read_text(encoding="utf-8"))
+            failed_index = int(failed_status.get("completed", 0))
+            if 0 <= failed_index < len(request["items"]):
+                failed_item = request["items"][failed_index]
+                original_text = str(entries[failed_index]["text"]).rstrip()
+                if original_text.endswith(("!", "?", "！", "？", "…")):
+                    failed_item = dict(failed_item)
+                    failed_item["text"] = original_text.rstrip("!?！？.…") + ("." if retry == 0 else "…")
+                    request["items"][failed_index] = failed_item
+                    request_path.write_text(json.dumps(request, ensure_ascii=False), encoding="utf-8")
+            process = subprocess.Popen(worker_command(request_path, device), env=environment,
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                       text=True, encoding="utf-8", errors="replace",
+                                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            _, stderr = communicate_process(cancellation_id, process, label="VieNeu synthesis retry",
+                                             timeout_seconds=MEDIA_PROCESS_TIMEOUT_SECONDS)
         if process.returncode:
             raise RuntimeError("VieNeu không tạo được giọng: " + str(stderr or "worker exited")[-1800:])
         status = json.loads(status_path.read_text(encoding="utf-8"))
@@ -305,15 +358,22 @@ def _worker(request):
             voice_options = {"ref_audio": str(reference), "denoise": True}
         else:
             voice_options = {"voice": native_voice(item["voice"])}
-        wav = np.asarray(model.infer(item["text"], **voice_options,
-                                   apply_watermark=False, batch_size=1, max_chars=160), dtype=np.float32).reshape(-1)
-        if not len(wav) or not np.isfinite(wav).all():
-            raise RuntimeError("VieNeu trả về audio trống/không hợp lệ.")
-        try:
-            validate_speech_waveform(wav, 48000)
-            validate_short_phrase_audio(wav, item["text"], "vi", 48000)
-        except SpeechQualityError as exc:
-            raise RuntimeError(str(exc).replace("OmniVoice", "VieNeu")) from exc
+        # Sampling can under-generate a short reaction. Retry only the failed
+        # sentence, retaining its speaker and the same acoustic quality checks.
+        for attempt in range(3):
+            wav = np.asarray(model.infer(item["text"], **voice_options,
+                                       apply_watermark=False, batch_size=1, max_chars=160), dtype=np.float32).reshape(-1)
+            try:
+                if not len(wav) or not np.isfinite(wav).all():
+                    raise SpeechQualityError("VieNeu trả về audio trống/không hợp lệ.")
+                validate_speech_waveform(wav, 48000)
+                validate_short_phrase_audio(wav, item["text"], "vi", 48000)
+                break
+            except SpeechQualityError as exc:
+                if attempt == 2:
+                    raise RuntimeError(str(exc).replace("OmniVoice", "VieNeu")) from exc
+                status["stage"] = "retrying_speech"
+                _write_atomic(path, status)
         peak = float(np.max(np.abs(wav)))
         if peak > .89:
             wav = wav * (.89 / peak)  # Encoding headroom; never amplify quiet speech here.

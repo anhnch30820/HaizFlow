@@ -68,6 +68,19 @@ Rectangle {
             spacing: Theme.space8
 
             StudioButton {
+                visible: AppController.selectedStatus === "done" && root.hasOutput
+                text: qsTr("Lưu video ra tệp")
+                enabled: !AppController.videoExportBusy
+                onClicked: AppController.requestVideoExport()
+            }
+
+            StudioButton {
+                visible: AppController.selectedStatus === "done" && root.hasOutput
+                text: qsTr("Mở thư mục lưu")
+                onClicked: AppController.openSelectedExportFolder()
+            }
+
+            StudioButton {
                 visible: root.canReview
                 text: qsTr("Duyệt phụ đề")
                 iconGlyph: "\uE70F"
@@ -77,15 +90,17 @@ Rectangle {
 
             DeferredActionButton {
                 objectName: "autoResumeButton"
-                visible: AppController.selectedStatus === "paused" && !root.selectedQueued
-                readyText: qsTr("Tiếp tục")
+                visible: ["paused", "failed", "cancelled"].indexOf(AppController.selectedStatus) >= 0
+                    && !root.selectedActive
+                readyText: qsTr("Tiếp tục xử lý")
                 iconGlyph: "\uE768"
                 variant: "secondary"
                 actionEnabled: !AppController.videoExportBusy
                 actionContext: ({videoId: AppController.selectedVideoId})
                 onExecute: context => {
                     if (context && context.videoId === AppController.selectedVideoId
-                            && AppController.selectedStatus === "paused" && !root.selectedQueued)
+                            && ["paused", "failed", "cancelled"].indexOf(AppController.selectedStatus) >= 0
+                            && !root.selectedActive)
                         AppController.resumeSelectedVideo();
                 }
             }

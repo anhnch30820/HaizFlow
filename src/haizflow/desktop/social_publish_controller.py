@@ -1581,6 +1581,7 @@ class SocialPublishController:
 
     def _publish_content_snapshot(self) -> dict[str, object]:
         item_keys = (
+            "title",
             "caption",
             "hashtags",
             "status",
@@ -1616,7 +1617,7 @@ class SocialPublishController:
         self._host.refreshVideos()
         return True
 
-    def update_item(self, row: int, caption: str, hashtags: str) -> bool:
+    def update_item(self, row: int, title: str, caption: str, hashtags: str) -> bool:
         item = self._host.tiktok_publish_items.item_at(row)
         if (
             not item
@@ -1627,6 +1628,7 @@ class SocialPublishController:
         updated = tiktok_publish.update_item(
             self._project_root,
             item["id"],
+            title=title,
             caption=caption,
             hashtags=hashtags,
             status="ready" if item["status"] not in {"published", "posted"} else item["status"],
@@ -1635,12 +1637,14 @@ class SocialPublishController:
         if updated is None:
             return False
         before = {
+            "title": str(item.get("title") or ""),
             "caption": str(item.get("caption") or ""),
             "hashtags": str(item.get("hashtags") or ""),
             "status": str(item.get("status") or "ready"),
             "error": str(item.get("error") or ""),
         }
         after = {
+            "title": str(updated.get("title") or ""),
             "caption": str(updated.get("caption") or ""),
             "hashtags": str(updated.get("hashtags") or ""),
             "status": str(updated.get("status") or "ready"),
@@ -1777,7 +1781,8 @@ class SocialPublishController:
                 raise zernio.ZernioCancelled("Upload cancelled.")
             self._events.put({"type": "publishing", "project_key": project_key, "item_id": item["id"]})
             content = tiktok_publish.compose_post_text(item["caption"], item["hashtags"])
-            title = next((line.strip() for line in content.splitlines() if line.strip()), Path(item["file_path"]).stem)
+            title = tiktok_publish.normalize_title(item.get("title") or "") or \
+                tiktok_publish.title_fallback(item.get("caption") or "", Path(item["file_path"]).name)
             result = _create_post_idempotently(
                 client,
                 {

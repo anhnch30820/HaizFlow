@@ -21,6 +21,14 @@ _ARMED_EXPORTS = {}
 _ARMED_EXPORT_STATES = {}
 _CURRENT = threading.local()
 _LOG = logging.getLogger(__name__)
+
+
+def _native_path(path):
+    """Allow backup filenames to exceed Windows' legacy MAX_PATH limit."""
+    value = os.path.abspath(os.fspath(path))
+    if os.name == "nt" and not value.startswith("\\\\?\\"):
+        return "\\\\?\\UNC\\" + value[2:] if value.startswith("\\\\") else "\\\\?\\" + value
+    return value
 _MANUAL_IDLE_FIELDS = {
     "status", "progress", "step", "step_detail", "error", "resume_step",
     "manual_target_tool", "manual_target_stage", "current_item", "total_items", "estimated_remaining_seconds",
@@ -199,20 +207,20 @@ def begin(video_id, *, resuming=False):
         if run["export_owned"] and video.project_type != "manual" and run["temp_files"]:
             backup = root / (".processing-backup-" + run["id"])
             run["backup"] = str(backup)
-            backup.mkdir()
+            os.mkdir(_native_path(backup))
             _save(run)
             for relative in run["temp_files"]:
                 if run["discard"]:
                     raise RuntimeError("Video cancelled by user.")
                 target = backup / relative
-                target.parent.mkdir(parents=True, exist_ok=True)
+                os.makedirs(_native_path(target.parent), exist_ok=True)
                 source = owned_path(temporary / relative, temporary)
-                with source.open("rb") as incoming, target.open("wb") as outgoing:
+                with open(_native_path(source), "rb") as incoming, open(_native_path(target), "wb") as outgoing:
                     while data := incoming.read(1024 * 1024):
                         if run["discard"]:
                             raise RuntimeError("Video cancelled by user.")
                         outgoing.write(data)
-                shutil.copystat(source, target)
+                shutil.copystat(_native_path(source), _native_path(target))
             run["backup_ready"] = True
         _save(run)
         return run

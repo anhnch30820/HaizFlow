@@ -10,6 +10,7 @@ Rectangle {
 
     required property int index
     required property string fileName
+    required property string postTitle
     required property string caption
     required property string hashtags
     required property string postText
@@ -142,7 +143,9 @@ Rectangle {
             enabled: root.published
                 ? root.platformPostUrlVerified && root.platformPostUrl.length > 0
                 : root.canPublish
-            onClicked: {
+            // Handle on press because a delegate relayout can cancel the
+            // release/click sequence even though the button looks enabled.
+            onPressed: {
                 if (root.published)
                     AppController.openTikTokPublishedPost(root.index)
                 else

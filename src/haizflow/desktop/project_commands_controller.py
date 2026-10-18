@@ -1504,7 +1504,7 @@ class ProjectCommandsController:
     def resume_selected_video(self) -> None:
         host = self._host
         video = video_store.get_video(host._selected_video_id) if host._selected_video_id else None
-        if not video or video.status != "paused" or host._processing_queue.contains(video.video_id):
+        if not video or video.status not in {"paused", "failed", "cancelled"} or host._processing_queue.contains(video.video_id):
             return
         from haizflow.services.processing_resume import can_resume
 
@@ -1516,6 +1516,16 @@ class ProjectCommandsController:
         # first clear both process-registry pause and cancellation flags.
         # Pre-writing "pending" here used to skip that cleanup and strand the
         # resumed worker in a permanently cancelled state.
+        if video.project_type in {"single", "batch"}:
+            destination = str((video.files or {}).get("last_export_destination") or "")
+            if destination and not os.path.exists(destination):
+                if host._video_exports.start(video.video_id, video.export_preset, destination, process=False):
+                    host.videoExportStarted.emit()
+            else:
+                # Recreate an export job after app restart. The export path
+                # reuses checkpoints; process=True would discard them.
+                host.requestVideoExport()
+            return
         if host._enqueue_video(video.video_id):
             video_store.log_to_video(video.video_id, "Resumed from the saved processing state.")
             host.selectedVideoChanged.emit()

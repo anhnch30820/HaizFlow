@@ -694,6 +694,14 @@ def process_video_sync(
             )
             reporter.update(22, "separating_audio", "Speech track ready")
         else:
+            # Multiple-speaker identification still needs a speech reference.
+            # When separation is disabled, the extracted source WAV is that
+            # reference. Replace any stale Demucs paths left by an earlier run.
+            files = dict(video.files)
+            files["speech_audio"] = temp_audio_wav
+            files.pop("background_audio", None)
+            video.files = files
+            update_video(video_id, files=files)
             log_to_video(video_id, "Audio separation disabled. Transcribing from original audio.")
 
         check_cancellation(video_id)
@@ -1036,6 +1044,7 @@ def _finish_after_translation(video, reporter, video_dir, original_audio_target,
         os.path.join(video_dir, "temp", "source_segments.json")
     )
     render_signature = _signature(
+        getattr(video, "logo_blur", {}),
         *(["output-speed-v1", video.output_speed] if getattr(video, "output_speed", 1.0) != 1.0 else []),
         timeline_signature,
         subtitle_signature,
@@ -1107,6 +1116,7 @@ def _finish_after_translation(video, reporter, video_dir, original_audio_target,
             original_subtitle_removal_mode=original_subtitle_removal_mode,
             original_subtitle_intervals=original_subtitle_intervals,
             watermark_scale_percent=getattr(video, "watermark_scale_percent", 100),
+            logo_blur=getattr(video, "logo_blur", {}),
             watermark_kind=getattr(video, "watermark_kind", "text"),
             watermark_image_path=str((video.files or {}).get("watermark_image") or ""),
             watermark_video_path=str((video.files or {}).get("watermark_video") or ""),

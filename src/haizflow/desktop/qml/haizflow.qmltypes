@@ -2359,6 +2359,16 @@ Module {
         Method { name: "exportVideoTo"; type: "bool"; Parameter { name: "a1"; type: "QString" } Parameter { name: "a2"; type: "QString" } Parameter { name: "a3"; type: "QString" } Parameter { name: "a4"; type: "bool" } }
         Method { name: "exportBatchVideos"; type: "bool" }
         Method { name: "retryVideoExports"; type: "bool" }
+        Method { name: "openSelectedExportFolder" }
+        Property { name: "logoBlurSettings"; type: "QVariantMap"; isReadonly: true }
+        Method {
+            name: "saveLogoBlur"
+            Parameter { name: "enabled"; type: "bool" }
+            Parameter { name: "x"; type: "double" }
+            Parameter { name: "y"; type: "double" }
+            Parameter { name: "width"; type: "double" }
+            Parameter { name: "height"; type: "double" }
+        }
         Method { name: "cancelVideoExport" }
         Method { name: "openExportDestinationFolder"; Parameter { name: "a1"; type: "QString" } }
         Method { name: "openVideoFolder" }

@@ -28,7 +28,7 @@ class ProcessingLifecycleController:
             return False
         from haizflow.services.processing_resume import can_resume, configuration_snapshot
 
-        resuming = video.status == "paused"
+        resuming = video.status in {"paused", "failed", "cancelled"}
         if not can_resume(host, video):
             return False
         manual_tool = (
@@ -46,7 +46,7 @@ class ProcessingLifecycleController:
                 title, message = gemini_key_notice(getattr(host, "_settings_language", "vi"))
                 host.appAlertRequested.emit(title, message, "warning")
                 return False
-        if video.status == "paused":
+        if resuming:
             prepare_video_resume(video_id)
         video_store.update_video(
             video_id,

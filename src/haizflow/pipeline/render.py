@@ -1535,6 +1535,19 @@ def _ffmpeg_progress_fraction(progress_text: str, duration: float) -> float | No
     return max(0.0, min(1.0, seconds / duration))
 
 
+def logo_blur_prefix(region: dict | None, width: int, height: int) -> str:
+    """Blur one rectangle in source coordinates, before crop and captions."""
+    if not region or not region.get("enabled"):
+        return ""
+    x = min(max(0, int(width * float(region.get("x", 75)) / 100)), width - 2)
+    y = min(max(0, int(height * float(region.get("y", 12)) / 100)), height - 2)
+    w = min(max(2, int(width * float(region.get("width", 24)) / 100)), width - x)
+    h = min(max(2, int(height * float(region.get("height", 10)) / 100)), height - y)
+    return (f"[0:v]split[logo_base][logo_patch];"
+            f"[logo_patch]crop={w}:{h}:{x}:{y},gblur=sigma=18:steps=2[logo_soft];"
+            f"[logo_base][logo_soft]overlay={x}:{y}:shortest=1[logo_source];")
+
+
 def render_video(
     video_path: str,
     voice_wav_path: str,
@@ -1571,6 +1584,7 @@ def render_video(
     subtitle_timeline_offset_seconds: float | None = None,
     export_preset: str = "source",
     output_speed: float = 1.0,
+    logo_blur: dict | None = None,
 ):
     """Render cropped video, positioned subtitles, and dubbed audio with FFmpeg."""
     subtitle_style = SubtitleStyle.model_validate(subtitle_style.model_dump())
@@ -1808,6 +1822,12 @@ def render_video(
             vf_filter = f"{removal_prefix}[source_without_original]{','.join(filters)}[outv]"
         else:
             vf_filter = ",".join(filters)
+
+    logo_prefix = logo_blur_prefix(logo_blur, source_width, source_height)
+    if logo_prefix:
+        if not vf_filter.endswith("[outv]"):
+            vf_filter = f"[0:v]{vf_filter}[outv]"
+        vf_filter = logo_prefix + vf_filter.replace("[0:v]", "[logo_source]")
 
     if use_media_watermark:
         if vf_filter.endswith("[outv]"):

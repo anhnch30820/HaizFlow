@@ -89,6 +89,18 @@ def engine_environment() -> dict[str, str]:
                      "HAIZFLOW_INSTALL_ROOT", "HAIZFLOW_RESOURCE_ROOT", "HAIZFLOW_SMOKE_TEST"):
             environment.pop(name, None)
         environment["HAIZFLOW_ENGINE_APP_ROOT"] = str(root)
+    elif not is_frozen():
+        # Source checkouts can use the same signed, frozen optional engines as
+        # an installed Core.  Those executables deliberately reject a direct
+        # launch unless Core supplies an explicit app root.  Opt the child
+        # into the existing isolated smoke/development path and pin every
+        # mutable directory to this checkout's portable runtime.
+        environment["HAIZFLOW_SMOKE_TEST"] = "1"
+        environment["HAIZFLOW_INSTALL_ROOT"] = str(install_root())
+        environment["HAIZFLOW_HOME"] = str(app_data_dir())
+        environment["APP_DATA_DIR"] = str(app_data_dir())
+        environment["RUNTIME_DATA_DIR"] = str(runtime_data_dir())
+        environment["MODELS_DIR"] = str(models_dir())
     return environment
 
 

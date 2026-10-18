@@ -110,6 +110,21 @@ class OfflinePackTests(unittest.TestCase):
             self.assertEqual(worker["UNRELATED_SETTING"], "keep")
             self.assertEqual(os.environ["HAIZFLOW_HOME"], environment["HAIZFLOW_HOME"])
 
+    def test_source_core_provisions_frozen_resource_engine_environment(self):
+        from haizflow.core import paths
+
+        with patch.object(paths, "is_frozen", return_value=False), \
+                patch.object(paths, "install_root", return_value=Path("D:/HaizFlow")), \
+                patch.object(paths, "app_data_dir", return_value=Path("D:/HaizFlow/runtime")), \
+                patch.object(paths, "runtime_data_dir", return_value=Path("D:/HaizFlow/runtime/data")), \
+                patch.object(paths, "models_dir", return_value=Path("D:/HaizFlow/runtime/models")):
+            worker = paths.engine_environment()
+            self.assertEqual(worker["HAIZFLOW_SMOKE_TEST"], "1")
+            self.assertEqual(worker["HAIZFLOW_INSTALL_ROOT"], str(Path("D:/HaizFlow")))
+            self.assertEqual(worker["HAIZFLOW_HOME"], str(Path("D:/HaizFlow/runtime")))
+            self.assertEqual(worker["RUNTIME_DATA_DIR"], str(Path("D:/HaizFlow/runtime/data")))
+            self.assertEqual(worker["MODELS_DIR"], str(Path("D:/HaizFlow/runtime/models")))
+
     def test_frozen_core_reads_catalog_beside_executable_not_only_internal(self):
         from haizflow.services.resource_packs import _load_release_pack_metadata, built_in_pack_definitions
 

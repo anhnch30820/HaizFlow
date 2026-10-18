@@ -565,7 +565,7 @@ class SocialPublishControllerTests(unittest.TestCase):
         ]
 
         with patch.object(self.controller, "_ensure_publish_project", return_value=True):
-            self.assertFalse(self.controller.update_item(0, "Changed", "#new"))
+            self.assertFalse(self.controller.update_item(0, "New title", "Changed", "#new"))
 
     def test_posting_capacity_is_neutral_until_creator_info_loads(self):
         self.assertTrue(self.controller.can_post_more)

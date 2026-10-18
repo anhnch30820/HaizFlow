@@ -7,10 +7,11 @@ import "."
 AppDialog {
     id: root
 
-    signal saveRequested(int row, string caption, string hashtags)
+    signal saveRequested(int row, string postTitle, string caption, string hashtags)
 
     property int row: -1
     property string fileName: ""
+    property string initialTitle: ""
     property string initialCaption: ""
     property string initialHashtags: ""
     readonly property int postLength: captionInput.text.length
@@ -22,11 +23,13 @@ AppDialog {
     title: qsTr("Chỉnh nội dung bài đăng")
     subtitle: root.fileName
 
-    function openForItem(itemRow, name, caption, hashtags) {
+    function openForItem(itemRow, name, postTitle, caption, hashtags) {
         row = itemRow
         fileName = name
+        initialTitle = postTitle
         initialCaption = caption
         initialHashtags = hashtags
+        titleInput.text = postTitle
         captionInput.text = caption
         hashtagInput.text = hashtags
         open()
@@ -35,11 +38,37 @@ AppDialog {
     function savePost() {
         if (root.postLength > 2200)
             return
-        root.saveRequested(root.row, captionInput.text, hashtagInput.text)
+        root.saveRequested(root.row, titleInput.text, captionInput.text, hashtagInput.text)
         root.close()
     }
 
-    onOpened: captionInput.forceActiveFocus()
+    onOpened: titleInput.forceActiveFocus()
+
+    RowLayout {
+        Layout.fillWidth: true
+
+        SettingLabel {
+            Layout.fillWidth: true
+            text: qsTr("Tiêu đề")
+        }
+
+        Text {
+            text: qsTr("%1 / 100").arg(titleInput.text.length)
+            color: titleInput.text.length > 100 ? Theme.danger : Theme.textSubtle
+            font.family: Theme.fontFamily
+            font.pixelSize: TypeScale.metadata
+            textFormat: Text.PlainText
+        }
+    }
+
+    StudioField {
+        id: titleInput
+        Layout.fillWidth: true
+        placeholderText: qsTr("Tiêu đề video YouTube")
+        accessibleName: qsTr("Tiêu đề bài đăng")
+        selectByMouse: true
+        maximumLength: 100
+    }
 
     RowLayout {
         Layout.fillWidth: true
@@ -98,7 +127,7 @@ AppDialog {
         StudioButton {
             text: qsTr("Lưu")
             variant: "primary"
-            enabled: root.postLength <= 2200
+            enabled: root.postLength <= 2200 && titleInput.text.trim().length > 0
             onClicked: root.savePost()
         }
     ]

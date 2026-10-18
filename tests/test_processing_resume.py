@@ -28,8 +28,10 @@ def test_changed_processing_setting_blocks_resume(field, value):
     assert host.appAlertRequested.emit.call_args.args[2] == "warning"
 
 
-def test_device_change_and_unsaved_draft_block_resume_but_restoring_settings_allows_it():
+@pytest.mark.parametrize("status", ["paused", "failed", "cancelled"])
+def test_device_change_and_unsaved_draft_block_resume_but_restoring_settings_allows_it(status):
     host, video = fixture()
+    video.status = status
     assert can_resume(host, video)
     host._settings_processing_device = "gpu"
     assert not can_resume(host, video)

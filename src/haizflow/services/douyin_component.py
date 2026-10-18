@@ -104,10 +104,15 @@ def smoke(root: Path, cancel_event=None):
     from playwright.sync_api import sync_playwright
     if sys.platform == "win32":
         verify_files(root, full=True, cancel_event=cancel_event)
+    # During installation ``root`` is the staging directory.  Do not use
+    # ``executable_path()`` here: it points at the final component location,
+    # which is only populated after this smoke test succeeds and staging is
+    # promoted.
+    executable = root / "chrome-win" / ("chrome.exe" if sys.platform == "win32" else "chrome")
     with tempfile.TemporaryDirectory(prefix="browser-smoke-", dir=root.parent) as profile:
         with sync_playwright() as driver:
             context = driver.chromium.launch_persistent_context(
-                profile, executable_path=str(executable_path()), headless=True,
+                profile, executable_path=str(executable), headless=True,
                 chromium_sandbox=True, timeout=15000,
                 args=["--no-first-run", "--no-default-browser-check", "--disable-background-networking"])
             try:

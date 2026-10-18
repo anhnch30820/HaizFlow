@@ -293,6 +293,26 @@ class SocialPublishStateTests(unittest.TestCase):
             self.assertEqual(edited["zernio_post_id"], "")
             self.assertEqual(edited["upload_progress"], 0)
 
+    def test_title_is_independent_and_legacy_items_fall_back_to_caption(self):
+        with tempfile.TemporaryDirectory() as project_root:
+            media = Path(project_root, "publishing", "media", "clip.mp4")
+            media.parent.mkdir(parents=True)
+            media.write_bytes(b"video")
+            item = tiktok_publish.new_item(str(media), "", 0, "Description line", "#one")
+            self.assertEqual(item["title"], "Description line")
+            state = tiktok_publish.empty_state()
+            item.pop("title")
+            state["items"] = [item]
+            tiktok_publish.save_state(project_root, state)
+
+            restored = tiktok_publish.load_state(project_root)
+            self.assertEqual(restored["items"][0]["title"], "Description line")
+            edited = tiktok_publish.update_item(
+                project_root, item["id"], title="A separate YouTube title"
+            )
+            self.assertEqual(edited["title"], "A separate YouTube title")
+            self.assertEqual(edited["caption"], "Description line")
+
 
 if __name__ == "__main__":
     unittest.main()

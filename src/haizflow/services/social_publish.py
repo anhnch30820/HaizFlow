@@ -19,6 +19,7 @@ STATE_FILE_NAME = ".haizflow-social-publish.json"
 LEGACY_STATE_FILE_NAME = ".haizflow-tiktok-publish.json"
 STATE_SCHEMA_VERSION = 6
 MAX_POST_TEXT_UTF16 = 2200
+MAX_TITLE_UTF16 = 100
 _STATE_LOCK = threading.RLock()
 _HASHTAG_SEPARATOR = re.compile(r"[\s,;]+", re.UNICODE)
 _HASHTAG_CLEANUP = re.compile(r"[^\w]", re.UNICODE)
@@ -101,6 +102,16 @@ def _truncate_utf16(value: str, limit: int) -> str:
 def normalize_caption(value: str) -> str:
     lines = [" ".join(line.split()) for line in str(value or "").replace("\r", "").split("\n")]
     return _truncate_utf16("\n".join(line for line in lines if line), MAX_POST_TEXT_UTF16)
+
+
+def normalize_title(value: str) -> str:
+    """Normalize a platform title independently from the post description."""
+    return _truncate_utf16(" ".join(str(value or "").split()), MAX_TITLE_UTF16)
+
+
+def title_fallback(caption: str, file_name: str = "") -> str:
+    first_line = next((line.strip() for line in str(caption or "").splitlines() if line.strip()), "")
+    return normalize_title(first_line or Path(str(file_name or "")).stem)
 
 
 def normalize_hashtags(value: str) -> str:
@@ -196,6 +207,8 @@ def load_state(project_root: str) -> dict[str, Any]:
                 "file_path": path_value,
                 "thumbnail_path": str(item.get("thumbnail_path") or ""),
                 "source_path": str(item.get("source_path") or ""),
+                "title": normalize_title(str(item.get("title") or ""))
+                or title_fallback(str(item.get("caption") or ""), str(item.get("file_name") or path_value)),
                 "caption": normalize_caption(str(item.get("caption") or "")),
                 "hashtags": normalize_hashtags(str(item.get("hashtags") or "")),
                 "status": str(item.get("status") or "ready"),
@@ -306,6 +319,9 @@ def update_item(project_root: str, item_id: str, **changes: Any) -> dict[str, An
         if item is None:
             return None
         content_changed = False
+        if "title" in changes:
+            changes["title"] = normalize_title(str(changes["title"] or ""))
+            content_changed = changes["title"] != item.get("title")
         if "caption" in changes:
             changes["caption"] = normalize_caption(str(changes["caption"] or ""))
             content_changed = changes["caption"] != item.get("caption")
@@ -409,6 +425,7 @@ def new_item(file_path: str, thumbnail_path: str, order: int, caption: str, hash
         "file_path": os.path.abspath(file_path),
         "thumbnail_path": os.path.abspath(thumbnail_path) if thumbnail_path else "",
         "source_path": "",
+        "title": title_fallback(caption, Path(file_path).name),
         "caption": normalize_caption(caption),
         "hashtags": normalize_hashtags(hashtags),
         "status": "ready",

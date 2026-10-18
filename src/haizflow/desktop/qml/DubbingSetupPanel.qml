@@ -98,7 +98,11 @@ InspectorPanel {
                 root.scheduleVideoSettingsSave()
             }
             onWatermarkRequested: watermarkDialogLoader.invoke("openForSelectedVideo", [])
+            onLogoBlurRequested: logoBlurDialog.openForVideo()
+            showLogoBlur: true
         }
+
+    LogoBlurDialog { id: logoBlurDialog }
 
     LazyDialogLoader {
         id: audioMixDialogLoader

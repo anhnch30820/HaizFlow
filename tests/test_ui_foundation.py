@@ -431,7 +431,9 @@ window.close()
             "DubbingSetupPanel.qml": 5,
             "ManualStageInspector.qml": 3,
             "BatchSettingsDialog.qml": 4,
-            "SocialPublishPage.qml": 5,
+            # The publish confirmation stays instantiated so a row click can
+            # always open it; the four heavier dialogs remain lazy.
+            "SocialPublishPage.qml": 4,
         }
         for filename, minimum_count in expected_loaders.items():
             source = (QML_DIR / filename).read_text(encoding="utf-8")

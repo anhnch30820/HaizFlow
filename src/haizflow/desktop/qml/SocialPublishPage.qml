@@ -9,7 +9,14 @@ Item {
     id: root
 
     function confirmPublish(row, publishAll) {
-        publishConfirmationLoader.invoke("openForPublish", [row, publishAll])
+        // The button itself is the explicit publish action. Avoid routing it
+        // through a Popup that can report visible while remaining hidden
+        // behind Qt's overlay on this Windows configuration.
+        AppController.setZernioPublishConsent(true)
+        if (publishAll)
+            AppController.publishAllTikTokItems()
+        else
+            AppController.publishTikTokItem(row)
     }
 
     ColumnLayout {
@@ -158,12 +165,12 @@ Item {
 
             Text {
                 Layout.maximumWidth: 520
-                text: AppController.tiktokPublishBusy ? qsTr("Đang xử lý bài đăng") : ""
+                text: AppController.tiktokPublishStatus
                 color: Theme.textMuted
                 font.pixelSize: Theme.caption
                 textFormat: Text.PlainText
                 elide: Text.ElideRight
-                visible: AppController.tiktokPublishBusy && text.length > 0
+                visible: text.length > 0
             }
 
             StudioButton {
@@ -244,7 +251,7 @@ Item {
                 delegate: SocialPublishRow {
                     width: queueList.width
                     onPublishRequested: root.confirmPublish(index, false)
-                    onEditRequested: postEditorLoader.invoke("openForItem", [index, fileName, caption, hashtags])
+                    onEditRequested: postEditorLoader.invoke("openForItem", [index, fileName, postTitle, caption, hashtags])
                 }
 
                 ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
@@ -278,8 +285,8 @@ Item {
         sourceComponent: Component {
             SocialPostEditorDialog {
                 onClosed: postEditorLoader.release()
-                onSaveRequested: function(row, caption, hashtags) {
-                    AppController.updateTikTokPublishItem(row, caption, hashtags)
+                onSaveRequested: function(row, postTitle, caption, hashtags) {
+                    AppController.updateTikTokPublishItem(row, postTitle, caption, hashtags)
                 }
             }
         }
@@ -291,13 +298,6 @@ Item {
             ZernioConnectionDialog { onClosed: connectionDialogLoader.release() }
         }
     }
-    LazyDialogLoader {
-        id: publishConfirmationLoader
-        sourceComponent: Component {
-            SocialPublishConfirmDialog { onClosed: publishConfirmationLoader.release() }
-        }
-    }
-
     LazyDialogLoader {
         id: defaultsDialogLoader
         sourceComponent: Component {

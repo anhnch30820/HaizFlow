@@ -235,6 +235,9 @@ class VideoExportController(QObject):
                "targetIdentity": self._chosen_targets.get(str(target), destination_identity(target))}
         previous_jobs = self.jobs
         self._set_jobs([job])
+        files = dict(video.files or {})
+        files["last_export_destination"] = str(target)
+        video_store.update_video(video.video_id, files=files)
         self.cancel.clear()
         ready = current_render(video, verify=False)
         legacy = str((video.files or {}).get("final_video") or "")

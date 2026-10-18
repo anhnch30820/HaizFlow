@@ -53,7 +53,7 @@ def configuration_snapshot(video, device: str, config=None) -> dict:
 
 
 def can_resume(host, video) -> bool:
-    if getattr(video, "status", "") != "paused":
+    if getattr(video, "status", "") not in {"paused", "failed", "cancelled"}:
         return True
     original = getattr(video, "processing_configuration", {}) or {}
     device = str(getattr(host, "_settings_processing_device", "cpu") or "cpu")

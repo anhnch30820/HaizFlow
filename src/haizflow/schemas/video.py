@@ -101,6 +101,7 @@ class VideoConfig(BaseModel):
     audio_ducking_enabled: bool = False
     audio_ducking_reduction_db: float = Field(default=-12.0, ge=-36, le=0)
     tts_volume: int = Field(default=100, ge=0, le=100)
+    logo_blur: dict = Field(default_factory=dict)
     watermark_text: str = Field(default="", max_length=80)
     # Manual and Auto share the preview transform for watermark sizing.
     watermark_scale_percent: int = Field(default=100, ge=25, le=300)
@@ -157,6 +158,7 @@ class VideoInfo(BaseModel):
     audio_ducking_enabled: bool = False
     audio_ducking_reduction_db: float = Field(default=-12.0, ge=-36, le=0)
     tts_volume: int = Field(default=100, ge=0, le=100)
+    logo_blur: dict = Field(default_factory=dict)
     watermark_text: str = Field(default="", max_length=80)
     watermark_scale_percent: int = Field(default=100, ge=25, le=300)
     watermark_kind: WatermarkKind = "text"

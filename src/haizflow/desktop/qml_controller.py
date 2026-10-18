@@ -4231,8 +4231,34 @@ class HaizFlowController(QObject):
         HaizFlowController._project_commands_for(self).resume_selected_video()
 
     @Slot()
+    def openSelectedExportFolder(self):
+        video = self._selected_video()
+        history = list(getattr(video, "export_history", []) or []) if video else []
+        if history:
+            self.openExportDestinationFolder(str(history[-1].get("path") or ""))
+        else:
+            self.requestVideoExport()
+
+    @Slot()
     def restartSelectedVideo(self):
         HaizFlowController._project_commands_for(self).restart_selected_video()
+
+    @Property("QVariantMap", notify=selectedVideoChanged)
+    def logoBlurSettings(self):
+        return dict(getattr(self._selected_video(), "logo_blur", {}) or {})
+
+    @Slot(bool, float, float, float, float)
+    def saveLogoBlur(self, enabled, x, y, width, height):
+        video = self._selected_video()
+        if not video or self.isSelectedVideoQueued or self.videoExportBusy:
+            return
+        x, y = max(0.0, min(98.0, x)), max(0.0, min(98.0, y))
+        region = dict(enabled=bool(enabled), x=x, y=y,
+                      width=max(1.0, min(100.0-x, width)),
+                      height=max(1.0, min(100.0-y, height)))
+        video_store.update_video(video.video_id, logo_blur=region)
+        self._refresh_selected_video_snapshot()
+        self.selectedVideoChanged.emit()
 
     @Slot(str, result=bool)
     def runManualStage(self, stage):
@@ -6694,9 +6720,9 @@ class HaizFlowController(QObject):
     def saveTikTokPublishDefaults(self, caption: str, hashtags: str, apply_to_existing: bool):
         return self._tiktok_publisher.save_defaults(caption, hashtags, apply_to_existing)
 
-    @Slot(int, str, str, result=bool)
-    def updateTikTokPublishItem(self, row: int, caption: str, hashtags: str):
-        return self._tiktok_publisher.update_item(row, caption, hashtags)
+    @Slot(int, str, str, str, result=bool)
+    def updateTikTokPublishItem(self, row: int, title: str, caption: str, hashtags: str):
+        return self._tiktok_publisher.update_item(row, title, caption, hashtags)
 
     @Slot(str, result=bool)
     def saveZernioApiKey(self, api_key: str):
@@ -7008,6 +7034,7 @@ class HaizFlowController(QObject):
             "audio_ducking_enabled": video.audio_ducking_enabled,
             "audio_ducking_reduction_db": video.audio_ducking_reduction_db,
             "tts_volume": video.tts_volume,
+            "logo_blur": getattr(video, "logo_blur", {}),
             "watermark_text": video.watermark_text,
             "watermark_scale_percent": getattr(video, "watermark_scale_percent", 100),
             "watermark_kind": getattr(video, "watermark_kind", "text"),
@@ -7264,6 +7291,7 @@ class HaizFlowController(QObject):
             audio_ducking_enabled=getattr(self, "_audio_ducking_enabled", False),
             audio_ducking_reduction_db=getattr(self, "_audio_ducking_reduction_db", -12.0),
             tts_volume=self._tts_volume,
+            logo_blur=dict(getattr(self._selected_video(), "logo_blur", {}) or {}),
             watermark_text=self._watermark_text,
             watermark_scale_percent=self._watermark_scale_percent,
             watermark_kind=self._watermark_kind,
@@ -7427,6 +7455,7 @@ class HaizFlowController(QObject):
             "audio_ducking_enabled": config.audio_ducking_enabled,
             "audio_ducking_reduction_db": config.audio_ducking_reduction_db,
             "tts_volume": config.tts_volume,
+            "logo_blur": config.logo_blur,
             "watermark_text": config.watermark_text,
             "watermark_scale_percent": config.watermark_scale_percent,
             "watermark_kind": config.watermark_kind,

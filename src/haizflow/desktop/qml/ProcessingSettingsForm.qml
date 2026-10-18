@@ -66,6 +66,8 @@ GridLayout {
     signal audioDuckingReductionEdited(int value)
     signal watermarkKindEdited(string value)
     signal watermarkRequested()
+    signal logoBlurRequested()
+    property bool showLogoBlur: false
 
     columns: width >= 650 ? 2 : 1
     columnSpacing: Theme.space20
@@ -338,6 +340,13 @@ GridLayout {
                 color: root.backgroundMusicPath.length > 0 ? Theme.text : Theme.textMuted
                 font.pixelSize: Theme.label
                 elide: Text.ElideMiddle
+            }
+
+            StudioButton {
+                text: qsTr("Làm mờ logo")
+                visible: root.showLogoBlur
+                enabled: root.editable && root.hasSource
+                onClicked: root.logoBlurRequested()
             }
 
             MusicPlaybackSettings {
